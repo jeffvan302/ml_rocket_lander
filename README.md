@@ -12,6 +12,8 @@ The project combines:
 
 For the detailed tracked scope of the project, see [project_requirements.md](./project_requirements.md).
 
+**You can create your own launcher with a ml trainer by giving a Coding LLM the [project_requirements.md](./project_requirements.md) and asking it to implement it.**
+
 ## Highlights
 
 - Launch the full GUI from `run.py`
