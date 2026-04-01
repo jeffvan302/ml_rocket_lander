@@ -55,6 +55,7 @@ class RocketLanderEnv:
         self.rewards = rewards or RewardConfig()
         self.rng = random.Random(seed)
         self.state: RocketState | None = None
+        self.active_gravity = float(self.physics.gravity)
         self.pad_x = 0.0
         self.pad_y = 0.0
         self.last_info: dict[str, Any] = {}
@@ -70,6 +71,8 @@ class RocketLanderEnv:
     def reset(self, seed: int | None = None, dramatic: bool = True) -> np.ndarray:
         if seed is not None:
             self.rng.seed(seed)
+        gravity_candidates = self.physics.gravity_candidates()
+        self.active_gravity = float(self.rng.choice(gravity_candidates))
 
         side = -1.0 if self.rng.random() < 0.5 else 1.0
         edge_bias = 0.60 + 0.40 * (self.rng.random() ** 0.35)
@@ -124,6 +127,7 @@ class RocketLanderEnv:
 
     def set_physics(self, physics: PhysicsConfig) -> None:
         self.physics = physics
+        self.active_gravity = float(self.physics.gravity)
 
     def set_rewards(self, rewards: RewardConfig) -> None:
         self.rewards = rewards
@@ -143,7 +147,7 @@ class RocketLanderEnv:
         return max(
             10.0,
             self.physics.main_thrust * 0.9,
-            self.physics.gravity * 2.5,
+            self.active_gravity * 2.5,
         )
 
     def _max_angular_speed(self) -> float:
@@ -205,7 +209,7 @@ class RocketLanderEnv:
         drag_x = self.physics.drag_coefficient * self.state.vx
         drag_y = self.physics.drag_coefficient * self.state.vy
         ax = math.sin(self.state.angle) * thrust_acc + wind - drag_x
-        ay = math.cos(self.state.angle) * thrust_acc - self.physics.gravity - drag_y
+        ay = math.cos(self.state.angle) * thrust_acc - self.active_gravity - drag_y
 
         self.state.vx += ax * dt
         self.state.vy += ay * dt
@@ -323,6 +327,7 @@ class RocketLanderEnv:
             "crashed": crashed,
             "offscreen": offscreen,
             "timeout": timeout,
+            "gravity": self.active_gravity,
             "distance_to_pad": distance,
             "fuel_ratio": fuel_ratio,
             "speed": speed,
@@ -336,6 +341,7 @@ class RocketLanderEnv:
                 "physics": self.physics.to_dict(),
                 "pad_x": self.pad_x,
                 "pad_y": self.pad_y,
+                "active_gravity": self.active_gravity,
                 "state": None,
                 "info": self.last_info,
             }
@@ -358,5 +364,6 @@ class RocketLanderEnv:
                 "turn": self.state.turn,
                 "trail": list(self.state.trail),
             },
+            "active_gravity": self.active_gravity,
             "info": dict(self.last_info),
         }

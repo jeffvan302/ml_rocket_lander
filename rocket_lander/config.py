@@ -14,6 +14,32 @@ ACTIVATION_OPTIONS = [
 ]
 
 
+def parse_float_list(text: str) -> list[float]:
+    values: list[float] = []
+    for item in text.split(","):
+        stripped = item.strip()
+        if not stripped:
+            continue
+        try:
+            values.append(float(stripped))
+        except ValueError:
+            continue
+    return values
+
+
+def find_invalid_float_tokens(text: str) -> list[str]:
+    invalid: list[str] = []
+    for item in text.split(","):
+        stripped = item.strip()
+        if not stripped:
+            continue
+        try:
+            float(stripped)
+        except ValueError:
+            invalid.append(stripped)
+    return invalid
+
+
 @dataclass
 class LayerConfig:
     units: int
@@ -36,6 +62,8 @@ class PhysicsConfig:
     world_height: float = 140.0
     dt: float = 0.1
     gravity: float = 9.5
+    gravity_multi_mode: bool = False
+    gravity_values_text: str = ""
     main_thrust: float = 19.0
     drag_coefficient: float = 0.03
     wind_strength: float = 0.0
@@ -59,6 +87,15 @@ class PhysicsConfig:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    def parsed_gravity_values(self) -> list[float]:
+        return parse_float_list(self.gravity_values_text)
+
+    def gravity_candidates(self) -> list[float]:
+        values = self.parsed_gravity_values()
+        if self.gravity_multi_mode and values:
+            return values
+        return [float(self.gravity)]
 
 
 @dataclass

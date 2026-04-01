@@ -3,7 +3,11 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-from rocket_lander.config import ACTIVATION_OPTIONS, AppConfig
+from rocket_lander.config import (
+    ACTIVATION_OPTIONS,
+    AppConfig,
+    find_invalid_float_tokens,
+)
 
 
 @dataclass
@@ -31,6 +35,29 @@ def validate_app_config(config: AppConfig) -> ValidationResult:
         result.errors.append("Physics dt must be positive.")
     if physics.gravity <= 0.0:
         result.errors.append("Gravity must be positive.")
+    gravity_values = physics.parsed_gravity_values()
+    invalid_gravity_tokens = find_invalid_float_tokens(physics.gravity_values_text)
+    if physics.gravity_multi_mode:
+        if not physics.gravity_values_text.strip():
+            result.errors.append(
+                "Gravity list mode is enabled, but the gravity list is empty."
+            )
+        elif not gravity_values:
+            result.errors.append(
+                "Gravity list mode is enabled, but no valid gravity values were found."
+            )
+        if invalid_gravity_tokens:
+            result.errors.append(
+                "Gravity list contains invalid values: "
+                + ", ".join(invalid_gravity_tokens[:4])
+            )
+        for gravity_value in gravity_values:
+            if gravity_value <= 0.0:
+                result.errors.append("Gravity list values must be positive.")
+            if gravity_value < 0.1 or gravity_value > 50.0:
+                result.errors.append(
+                    "Gravity list values must stay within the supported range of 0.1 to 50.0."
+                )
     if physics.main_thrust <= 0.0:
         result.errors.append("Main thrust must be positive.")
     if physics.drag_coefficient < 0.0:
@@ -69,8 +96,15 @@ def validate_app_config(config: AppConfig) -> ValidationResult:
         result.warnings.append("Spawn y max is very high relative to the world height.")
     if physics.spawn_x_extent >= physics.world_width * 0.75:
         result.warnings.append("Spawn x extent is close to the world edge, which makes landing harder.")
-    if physics.main_thrust <= physics.gravity * 1.02:
+    gravity_reference = max(gravity_values) if (physics.gravity_multi_mode and gravity_values) else physics.gravity
+    if physics.main_thrust <= gravity_reference * 1.02:
         result.warnings.append("Main thrust is only slightly stronger than gravity, so control may be weak.")
+    if physics.gravity_multi_mode and len(gravity_values) >= 2:
+        gravity_span = max(gravity_values) - min(gravity_values)
+        if gravity_span >= 6.0:
+            result.warnings.append(
+                "Gravity list spans a wide range, so the agent may need longer training to generalize."
+            )
 
     if ppo.target_generations < 1:
         result.errors.append("Target generations must be at least 1.")

@@ -193,6 +193,9 @@ class ControlPanel(ttk.Frame):
         self.reward_vars: dict[str, tk.Variable] = {}
         self.field_widgets: dict[str, ttk.Spinbox] = {}
         self.brain_source_var = tk.StringVar(value="best")
+        self.gravity_multi_var = tk.BooleanVar(value=False)
+        self.gravity_values_var = tk.StringVar(value="")
+        self.gravity_mode_hint_var = tk.StringVar(value="Single gravity active")
         self.session_status_var = tk.StringVar(value="Ready to evaluate and train.")
         self.evaluation_status_var = tk.StringVar(
             value="Last eval: awaiting result"
@@ -399,11 +402,49 @@ class ControlPanel(ttk.Frame):
                 padx=(0, 8),
                 pady=3,
             )
-            widget = self._create_spinbox(grid, spec, var)
-            widget.grid(row=row, column=col + 1, sticky="ew", pady=3)
+            if spec.key == "gravity":
+                gravity_row = ttk.Frame(grid, style="PanelInner.TFrame")
+                gravity_row.grid(row=row, column=col + 1, sticky="ew", pady=3)
+                widget = self._create_spinbox(gravity_row, spec, var)
+                widget.pack(side="left", fill="x", expand=True)
+                ttk.Button(
+                    gravity_row,
+                    text="⚙",
+                    width=3,
+                    style="SecondaryGlow.TButton",
+                    command=self._toggle_gravity_mode,
+                ).pack(side="left", padx=(6, 0))
+            else:
+                widget = self._create_spinbox(grid, spec, var)
+                widget.grid(row=row, column=col + 1, sticky="ew", pady=3)
             self.field_widgets[spec.key] = widget
         grid.columnconfigure(1, weight=1)
         grid.columnconfigure(3, weight=1)
+        self.gravity_multi_frame = ttk.Frame(box, style="PanelInner.TFrame")
+        ttk.Label(
+            self.gravity_multi_frame,
+            text="Gravity list",
+            style="PanelLabel.TLabel",
+        ).pack(anchor="w")
+        ttk.Entry(
+            self.gravity_multi_frame,
+            textvariable=self.gravity_values_var,
+            style="Neon.TEntry",
+        ).pack(fill="x", pady=(4, 2))
+        ttk.Label(
+            self.gravity_multi_frame,
+            text="Comma-separated values used per episode, for example: 6.8, 8, 9.5",
+            style="PanelMuted.TLabel",
+            wraplength=290,
+            justify="left",
+        ).pack(fill="x")
+        ttk.Label(
+            box,
+            textvariable=self.gravity_mode_hint_var,
+            style="PanelMuted.TLabel",
+            wraplength=290,
+            justify="left",
+        ).pack(fill="x", pady=(6, 2))
         self.apply_physics_button = ttk.Button(
             box,
             text="Apply Physics",
@@ -420,7 +461,29 @@ class ControlPanel(ttk.Frame):
             wraplength=290,
             justify="left",
         ).pack(fill="x")
+        self._update_gravity_mode_ui()
         return box
+
+    def _toggle_gravity_mode(self) -> None:
+        self.gravity_multi_var.set(not self.gravity_multi_var.get())
+        self._update_gravity_mode_ui()
+
+    def _update_gravity_mode_ui(self) -> None:
+        gravity_widget = self.field_widgets.get("gravity")
+        if self.gravity_multi_var.get():
+            self.gravity_mode_hint_var.set(
+                "Gravity pool active. Each episode samples one value from the list."
+            )
+            if gravity_widget is not None:
+                gravity_widget.state(["disabled"])
+            self.gravity_multi_frame.pack(fill="x", pady=(2, 8), before=self.apply_physics_button)
+        else:
+            self.gravity_mode_hint_var.set(
+                "Single gravity active. Toggle the gear to use a gravity pool."
+            )
+            if gravity_widget is not None:
+                gravity_widget.state(["!disabled"])
+            self.gravity_multi_frame.pack_forget()
 
     def _build_rewards_section(self) -> ttk.LabelFrame:
         box = self._section("Rewards and Penalties")
@@ -473,6 +536,8 @@ class ControlPanel(ttk.Frame):
                 spec.key,
                 self._read_numeric_value(spec, self.physics_vars[spec.key]),
             )
+        config.physics.gravity_multi_mode = bool(self.gravity_multi_var.get())
+        config.physics.gravity_values_text = self.gravity_values_var.get().strip()
         for spec in REWARD_FIELD_SPECS:
             setattr(
                 config.rewards,
@@ -510,10 +575,13 @@ class ControlPanel(ttk.Frame):
             self.ppo_vars[spec.key].set(getattr(config.ppo, spec.key))
         for spec in PHYSICS_FIELD_SPECS:
             self.physics_vars[spec.key].set(getattr(config.physics, spec.key))
+        self.gravity_multi_var.set(bool(config.physics.gravity_multi_mode))
+        self.gravity_values_var.set(config.physics.gravity_values_text)
         for spec in REWARD_FIELD_SPECS:
             self.reward_vars[spec.key].set(getattr(config.rewards, spec.key))
         self.layer_editor.set_layers(config.network.hidden_layers)
         self.output_activation_var.set(config.network.output_activation)
+        self._update_gravity_mode_ui()
 
     def selected_brain_source(self) -> str:
         return self.brain_source_var.get()

@@ -116,7 +116,12 @@ class GameCanvas(tk.Canvas):
             throttle=float(state["throttle"]),
             step_count=int(state["steps"]),
         )
-        self._draw_hud(width, state, info)
+        self._draw_hud(
+            width,
+            state,
+            info,
+            active_gravity=float(self.snapshot.get("active_gravity", 0.0)),
+        )
         self.create_rectangle(
             width - 240,
             12,
@@ -298,8 +303,9 @@ class GameCanvas(tk.Canvas):
         width: int,
         state: dict[str, Any],
         info: dict[str, Any],
+        active_gravity: float,
     ) -> None:
-        self.create_rectangle(18, 18, 232, 136, fill="#091a26", outline="#b7eee5", width=1)
+        self.create_rectangle(18, 18, 232, 152, fill="#091a26", outline="#b7eee5", width=1)
         self.create_text(
             32,
             32,
@@ -312,6 +318,7 @@ class GameCanvas(tk.Canvas):
             f"Fuel: {state['fuel']:.1f}",
             f"Velocity: {math.hypot(state['vx'], state['vy']):.2f}",
             f"Angle: {math.degrees(state['angle']):.1f} deg",
+            f"Gravity: {active_gravity:.2f}",
             f"Steps: {state['steps']}",
             f"Event: {info.get('event', 'flying')}",
         ]

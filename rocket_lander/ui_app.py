@@ -110,39 +110,49 @@ def describe_evaluation_outcome(info: dict[str, Any]) -> dict[str, str]:
     event = str(info.get("event", "unknown"))
     speed = float(info.get("speed", 0.0))
     score = float(info.get("score", 0.0))
+    gravity = float(info.get("gravity", 0.0))
+    detail_suffix = f" | g {gravity:.2f}" if gravity > 0.0 else ""
 
     if info.get("landed"):
         return {
             "kind": "success",
             "headline": "Last eval: SUCCESS LANDING",
-            "detail": f"Event landed | score {score:.1f} | speed {speed:.2f}",
+            "detail": (
+                f"Event landed | score {score:.1f} | speed {speed:.2f}{detail_suffix}"
+            ),
             "counter_key": "landed",
         }
     if info.get("crashed") or event == "crashed":
         return {
             "kind": "failure",
             "headline": "Last eval: CRASH",
-            "detail": f"Event crashed | score {score:.1f} | speed {speed:.2f}",
+            "detail": (
+                f"Event crashed | score {score:.1f} | speed {speed:.2f}{detail_suffix}"
+            ),
             "counter_key": "crashed",
         }
     if info.get("offscreen") or event == "offscreen":
         return {
             "kind": "failure",
             "headline": "Last eval: OFFSCREEN",
-            "detail": f"Event offscreen | score {score:.1f} | speed {speed:.2f}",
+            "detail": (
+                f"Event offscreen | score {score:.1f} | speed {speed:.2f}{detail_suffix}"
+            ),
             "counter_key": "offscreen",
         }
     if info.get("timeout") or event == "timeout":
         return {
             "kind": "failure",
             "headline": "Last eval: TIMEOUT",
-            "detail": f"Event timeout | score {score:.1f} | speed {speed:.2f}",
+            "detail": (
+                f"Event timeout | score {score:.1f} | speed {speed:.2f}{detail_suffix}"
+            ),
             "counter_key": "timeout",
         }
     return {
         "kind": "neutral",
         "headline": f"Last eval: {event.upper()}",
-        "detail": f"Score {score:.1f} | speed {speed:.2f}",
+        "detail": f"Score {score:.1f} | speed {speed:.2f}{detail_suffix}",
         "counter_key": "other",
     }
 
@@ -387,6 +397,23 @@ class MainApplication:
             foreground=[("disabled", "#53657c")],
             bordercolor=[("focus", neon_pink), ("active", border)],
             arrowcolor=[("active", "#ffacf7")],
+        )
+        style.configure(
+            "Neon.TEntry",
+            foreground=text_main,
+            fieldbackground=bg_field,
+            background=bg_panel_alt,
+            bordercolor=border,
+            lightcolor=border,
+            darkcolor=border_soft,
+            insertcolor=neon_cyan,
+            padding=5,
+        )
+        style.map(
+            "Neon.TEntry",
+            foreground=[("disabled", "#53657c")],
+            fieldbackground=[("disabled", "#09101b")],
+            bordercolor=[("focus", neon_cyan), ("active", border)],
         )
         style.configure(
             "Panel.Vertical.TScrollbar",

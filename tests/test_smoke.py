@@ -30,12 +30,29 @@ class RocketLanderSmokeTests(unittest.TestCase):
         self.assertIsInstance(done, bool)
         self.assertIn("event", info)
 
+    def test_environment_multi_gravity_uses_only_configured_values(self) -> None:
+        config = AppConfig()
+        config.physics.gravity_multi_mode = True
+        config.physics.gravity_values_text = "6.8, 8, 9.5"
+        env = RocketLanderEnv(config.physics, config.rewards, seed=3)
+
+        seen: set[float] = set()
+        for seed in range(12):
+            env.reset(seed=seed)
+            active_gravity = round(float(env.snapshot()["active_gravity"]), 1)
+            seen.add(active_gravity)
+
+        self.assertTrue(seen.issubset({6.8, 8.0, 9.5}))
+        self.assertGreaterEqual(len(seen), 2)
+
     def test_trainer_runs_and_checkpoint_roundtrip(self) -> None:
         config = AppConfig()
         config.ppo.target_generations = 1
         config.ppo.games_per_generation = 3
         config.ppo.ppo_epochs = 2
         config.ppo.minibatch_size = 32
+        config.physics.gravity_multi_mode = True
+        config.physics.gravity_values_text = "6.8, 8, 9.5"
 
         summary = TrainerSession(config=config, device="cpu").train()
         self.assertEqual(summary.status, "completed")
@@ -63,6 +80,8 @@ class RocketLanderSmokeTests(unittest.TestCase):
             self.assertIn("metadata", payload)
             self.assertEqual(payload["metadata"]["schema_version"], 2)
             self.assertIn("observation_normalizer_state", payload)
+            self.assertTrue(payload["config"].physics.gravity_multi_mode)
+            self.assertEqual(payload["config"].physics.gravity_values_text, "6.8, 8, 9.5")
 
             resumed = TrainerSession(
                 config=payload["config"],
@@ -95,6 +114,19 @@ class RocketLanderSmokeTests(unittest.TestCase):
         )
         self.assertTrue(
             any("Pad width" in error for error in validation.errors)
+        )
+
+    def test_validation_catches_invalid_multi_gravity_list(self) -> None:
+        config = AppConfig()
+        config.physics.gravity_multi_mode = True
+        config.physics.gravity_values_text = "6.8, nope, -1"
+        validation = validate_app_config(config)
+        self.assertFalse(validation.is_valid)
+        self.assertTrue(
+            any("Gravity list contains invalid values" in error for error in validation.errors)
+        )
+        self.assertTrue(
+            any("Gravity list values must be positive" in error for error in validation.errors)
         )
 
     def test_poll_training_queue_survives_bridge_reset(self) -> None:

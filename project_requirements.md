@@ -128,6 +128,7 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
     - world width / height
     - dt
     - gravity
+    - gravity pool mode and gravity list
     - thrust
     - drag
     - wind
@@ -143,7 +144,13 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
 
 31. The physics section must include an `Apply Physics` action that updates the live evaluation environment without restarting the whole app.
 
-32. The left panel must allow editing at least these rewards and penalties:
+32. The gravity control in the physics section must provide a toggle beside the single gravity input that switches between:
+    - single gravity mode
+    - gravity pool mode with a comma-separated gravity list such as `6.8, 8, 9.5`
+
+33. When gravity pool mode is enabled, each new training episode and each new pause-state evaluation episode must randomly choose one gravity value from the configured list and use only those configured values.
+
+34. The left panel must allow editing at least these rewards and penalties:
     - landing bonus
     - close to pad bonus
     - progress scale
@@ -164,43 +171,45 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
     - velocity penalty
     - spin penalty
 
-33. The GUI must validate settings before training begins, including cross-field checks such as:
+35. The GUI must validate settings before training begins, including cross-field checks such as:
     - `spawn_y_min <= spawn_y_max`
     - positive fuel / thrust / gravity constraints
+    - valid gravity list values when gravity pool mode is enabled
     - pad width smaller than world width
     - valid landing thresholds
     - supported activation names
 
-34. Validation must distinguish between blocking errors and non-blocking warnings.
+36. Validation must distinguish between blocking errors and non-blocking warnings.
 
-35. The game view must clearly visualize:
+37. The game view must clearly visualize:
     - rocket body
     - flame/thrust
     - landing pad
     - trail/history
     - telemetry overlay
     - evaluation/training state
+    - the active gravity for the current episode
 
-36. During training, the game animation must pause to reduce rendering overhead, while the graph and network panel update after each generation.
+38. During training, the game animation must pause to reduce rendering overhead, while the graph and network panel update after each generation.
 
-37. The graph view must show:
+39. The graph view must show:
     - landing rate
     - generation best score
     - generation mean score
 
-38. The right panel must render the actor network with all nodes shown.
+40. The right panel must render the actor network with all nodes shown.
 
-39. Connections in the network view must visually emphasize stronger weights more than weaker weights.
+41. Connections in the network view must visually emphasize stronger weights more than weaker weights.
 
-40. The network view should be efficient enough to handle larger user-defined networks by caching layout and avoiding unnecessary redraw work.
+42. The network view should be efficient enough to handle larger user-defined networks by caching layout and avoiding unnecessary redraw work.
 
-41. The neural-network visualization must update when:
+43. The neural-network visualization must update when:
     - a new generation completes
     - the selected brain changes
     - the loaded checkpoint changes
     - the canvas size changes
 
-42. The model input vector must include:
+44. The model input vector must include:
     - delta y from pad
     - delta x from pad
     - angle to pad center
@@ -215,7 +224,7 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
     - angular velocity
     - distance to pad
 
-43. Save/load must persist:
+45. Save/load must persist:
     - current brain weights
     - best brain weights
     - optimizer state when available
@@ -226,7 +235,7 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
     - best observation normalization state
     - checkpoint metadata
 
-44. Checkpoint metadata should include at least:
+46. Checkpoint metadata should include at least:
     - schema version
     - save timestamp
     - generation count
@@ -237,27 +246,28 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
     - best generation summary
     - whether the checkpoint is resume-capable
 
-45. Loading an older checkpoint format should remain backward compatible when possible by falling back to a single loaded brain if separate current/best session data is unavailable.
+47. Loading an older checkpoint format should remain backward compatible when possible by falling back to a single loaded brain if separate current/best session data is unavailable.
 
-46. The project must include automated tests and smoke checks that verify:
+48. The project must include automated tests and smoke checks that verify:
     - environment observation shape and step behavior
+    - gravity pool episodes use only configured gravity values
     - trainer can complete a short run
     - checkpoint round-trip works
     - config validation catches bad input
     - resumed training from a saved session works
 
-47. Minimum validation commands for project completion:
+49. Minimum validation commands for project completion:
     - `python run.py smoke-test`
     - `python -m unittest discover -s tests`
     - `python run.py headless-train --generations 1 --games 4`
     - `python run.py headless-train --load checkpoint.pt --generations 1 --games 2`
 
-48. During pause-state or post-training evaluation playback, the GUI must persistently display the most recent terminal evaluation outcome until the next evaluation episode finishes.
+50. During pause-state or post-training evaluation playback, the GUI must persistently display the most recent terminal evaluation outcome until the next evaluation episode finishes.
 
-49. The evaluation outcome display must distinguish at minimum:
+51. The evaluation outcome display must distinguish at minimum:
     - successful landing
     - crash
     - offscreen loss
     - timeout
 
-50. The GUI should also maintain visible running counts for these evaluation outcomes during the current evaluation watch session so the user can quickly judge whether the observed brain is improving.
+52. The GUI should also maintain visible running counts for these evaluation outcomes during the current evaluation watch session so the user can quickly judge whether the observed brain is improving.
