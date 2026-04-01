@@ -95,20 +95,30 @@ REWARD_FIELD_SPECS = [
 
 class LayerEditor(ttk.Frame):
     def __init__(self, master, layers: list[LayerConfig]) -> None:
-        super().__init__(master)
+        super().__init__(master, style="PanelInner.TFrame")
         self.rows: list[dict[str, Any]] = []
-        self.rows_frame = ttk.Frame(self)
+        self.rows_frame = ttk.Frame(self, style="PanelInner.TFrame")
         self.rows_frame.pack(fill="x", expand=True)
-        ttk.Button(self, text="Add Hidden Layer", command=self.add_row).pack(
+        ttk.Button(
+            self,
+            text="Add Hidden Layer",
+            style="AccentGlow.TButton",
+            command=self.add_row,
+        ).pack(
             anchor="w",
             pady=(8, 0),
         )
         self.set_layers(layers)
 
     def add_row(self, units: int = 8, activation: str = "relu") -> None:
-        row_frame = ttk.Frame(self.rows_frame)
+        row_frame = ttk.Frame(self.rows_frame, style="PanelInner.TFrame")
         row_frame.pack(fill="x", pady=3)
-        label = ttk.Label(row_frame, text=f"Layer {len(self.rows) + 1}", width=9)
+        label = ttk.Label(
+            row_frame,
+            text=f"Layer {len(self.rows) + 1}",
+            width=9,
+            style="PanelLabel.TLabel",
+        )
         label.pack(side="left")
         units_var = tk.IntVar(value=units)
         activation_var = tk.StringVar(value=activation)
@@ -118,6 +128,7 @@ class LayerEditor(ttk.Frame):
             to=256,
             textvariable=units_var,
             width=8,
+            style="Neon.TSpinbox",
         ).pack(side="left", padx=4)
         ttk.Combobox(
             row_frame,
@@ -125,10 +136,12 @@ class LayerEditor(ttk.Frame):
             textvariable=activation_var,
             state="readonly",
             width=12,
+            style="Neon.TCombobox",
         ).pack(side="left", padx=4)
         ttk.Button(
             row_frame,
             text="Remove",
+            style="DangerGlow.TButton",
             command=lambda: self.remove_row(row_frame),
         ).pack(side="left", padx=4)
         self.rows.append(
@@ -174,13 +187,19 @@ class LayerEditor(ttk.Frame):
 
 class ControlPanel(ttk.Frame):
     def __init__(self, master, config: AppConfig) -> None:
-        super().__init__(master, padding=(12, 12))
+        super().__init__(master, padding=(12, 12), style="Panel.TFrame")
         self.ppo_vars: dict[str, tk.Variable] = {}
         self.physics_vars: dict[str, tk.Variable] = {}
         self.reward_vars: dict[str, tk.Variable] = {}
         self.field_widgets: dict[str, ttk.Spinbox] = {}
         self.brain_source_var = tk.StringVar(value="best")
         self.session_status_var = tk.StringVar(value="Ready to evaluate and train.")
+        self.evaluation_status_var = tk.StringVar(
+            value="Last eval: awaiting result"
+        )
+        self.evaluation_totals_var = tk.StringVar(
+            value="Landings 0 | Crashes 0 | Offscreen 0 | Timeouts 0"
+        )
         self.best_metrics_var = tk.StringVar(
             value="Best landing rate: n/a\nBest mean score: n/a"
         )
@@ -194,7 +213,7 @@ class ControlPanel(ttk.Frame):
         ttk.Label(
             self,
             text="Tune the lander, shape the rewards, and train a PPO brain.",
-            style="Muted.TLabel",
+            style="HeroMuted.TLabel",
             wraplength=300,
             justify="left",
         ).pack(anchor="w", pady=(2, 12))
@@ -208,60 +227,102 @@ class ControlPanel(ttk.Frame):
         self.set_config(config)
 
     def _section(self, title: str) -> ttk.LabelFrame:
-        return ttk.LabelFrame(self, text=title, padding=(10, 10))
+        return ttk.LabelFrame(
+            self,
+            text=title,
+            padding=(10, 10),
+            style="Panel.TLabelframe",
+        )
 
     def _build_session_section(self) -> ttk.LabelFrame:
         box = self._section("Session")
-        self.start_button = ttk.Button(box, text="Start / Resume Training")
-        self.pause_button = ttk.Button(box, text="Pause After Generation")
-        self.stop_button = ttk.Button(box, text="Stop")
+        self.start_button = ttk.Button(
+            box,
+            text="Start / Resume Training",
+            style="PrimaryGlow.TButton",
+        )
+        self.pause_button = ttk.Button(
+            box,
+            text="Pause After Generation",
+            style="SecondaryGlow.TButton",
+        )
+        self.stop_button = ttk.Button(
+            box,
+            text="Stop",
+            style="DangerGlow.TButton",
+        )
         self.start_button.pack(fill="x", pady=3)
         self.pause_button.pack(fill="x", pady=3)
         self.stop_button.pack(fill="x", pady=3)
         ttk.Label(
             box,
             textvariable=self.session_status_var,
-            style="Muted.TLabel",
+            style="PanelMuted.TLabel",
             wraplength=290,
             justify="left",
         ).pack(fill="x", pady=(8, 0))
+        ttk.Label(
+            box,
+            textvariable=self.evaluation_status_var,
+            style="MetricCard.TLabel",
+            wraplength=290,
+            justify="left",
+            anchor="w",
+        ).pack(fill="x", pady=(10, 6))
+        ttk.Label(
+            box,
+            textvariable=self.evaluation_totals_var,
+            style="PanelMuted.TLabel",
+            wraplength=290,
+            justify="left",
+        ).pack(fill="x")
         return box
 
     def _build_brain_section(self) -> ttk.LabelFrame:
         box = self._section("Brains")
-        radio_row = ttk.Frame(box)
+        radio_row = ttk.Frame(box, style="PanelInner.TFrame")
         radio_row.pack(fill="x", pady=(0, 8))
         ttk.Radiobutton(
             radio_row,
             text="Current",
             variable=self.brain_source_var,
             value="current",
+            style="Panel.TRadiobutton",
         ).pack(side="left")
         ttk.Radiobutton(
             radio_row,
             text="Best so far",
             variable=self.brain_source_var,
             value="best",
+            style="Panel.TRadiobutton",
         ).pack(side="left", padx=(12, 0))
 
-        button_row = ttk.Frame(box)
+        button_row = ttk.Frame(box, style="PanelInner.TFrame")
         button_row.pack(fill="x")
-        self.save_button = ttk.Button(button_row, text="Save Session")
-        self.load_button = ttk.Button(button_row, text="Load Session")
+        self.save_button = ttk.Button(
+            button_row,
+            text="Save Session",
+            style="AccentGlow.TButton",
+        )
+        self.load_button = ttk.Button(
+            button_row,
+            text="Load Session",
+            style="PrimaryGlow.TButton",
+        )
         self.save_button.pack(side="left", fill="x", expand=True, padx=(0, 4))
         self.load_button.pack(side="left", fill="x", expand=True, padx=(4, 0))
 
         ttk.Label(
             box,
             textvariable=self.best_metrics_var,
-            style="Card.TLabel",
+            style="MetricCard.TLabel",
             justify="left",
             anchor="w",
         ).pack(fill="x", pady=(10, 6))
         ttk.Label(
             box,
             textvariable=self.current_metrics_var,
-            style="Card.TLabel",
+            style="MetricCard.TLabel",
             justify="left",
             anchor="w",
         ).pack(fill="x")
@@ -269,12 +330,12 @@ class ControlPanel(ttk.Frame):
 
     def _build_training_section(self) -> ttk.LabelFrame:
         box = self._section("PPO Trainer")
-        grid = ttk.Frame(box)
+        grid = ttk.Frame(box, style="PanelInner.TFrame")
         grid.pack(fill="x")
         for row, spec in enumerate(PPO_FIELD_SPECS):
             var = spec.make_var()
             self.ppo_vars[spec.key] = var
-            ttk.Label(grid, text=spec.label).grid(
+            ttk.Label(grid, text=spec.label, style="PanelLabel.TLabel").grid(
                 row=row,
                 column=0,
                 sticky="w",
@@ -289,12 +350,16 @@ class ControlPanel(ttk.Frame):
 
     def _build_network_section(self, config: AppConfig) -> ttk.LabelFrame:
         box = self._section("Network")
-        ttk.Label(box, text="Hidden layers").pack(anchor="w")
+        ttk.Label(box, text="Hidden layers", style="PanelLabel.TLabel").pack(anchor="w")
         self.layer_editor = LayerEditor(box, config.network.hidden_layers)
         self.layer_editor.pack(fill="x", pady=(4, 8))
-        output_row = ttk.Frame(box)
+        output_row = ttk.Frame(box, style="PanelInner.TFrame")
         output_row.pack(fill="x")
-        ttk.Label(output_row, text="Output activation").pack(side="left")
+        ttk.Label(
+            output_row,
+            text="Output activation",
+            style="PanelLabel.TLabel",
+        ).pack(side="left")
         self.output_activation_var = tk.StringVar(
             value=config.network.output_activation
         )
@@ -304,6 +369,7 @@ class ControlPanel(ttk.Frame):
             textvariable=self.output_activation_var,
             state="readonly",
             width=12,
+            style="Neon.TCombobox",
         ).pack(side="right")
         ttk.Label(
             box,
@@ -311,7 +377,7 @@ class ControlPanel(ttk.Frame):
                 "The actor outputs throttle and gimbal actions. "
                 "The critic value stream trains alongside it."
             ),
-            style="Muted.TLabel",
+            style="PanelMuted.TLabel",
             wraplength=290,
             justify="left",
         ).pack(fill="x", pady=(8, 0))
@@ -319,14 +385,14 @@ class ControlPanel(ttk.Frame):
 
     def _build_physics_section(self) -> ttk.LabelFrame:
         box = self._section("Physics, Spawn, and Landing")
-        grid = ttk.Frame(box)
+        grid = ttk.Frame(box, style="PanelInner.TFrame")
         grid.pack(fill="x")
         for index, spec in enumerate(PHYSICS_FIELD_SPECS):
             var = spec.make_var()
             self.physics_vars[spec.key] = var
             row = index // 2
             col = (index % 2) * 2
-            ttk.Label(grid, text=spec.label).grid(
+            ttk.Label(grid, text=spec.label, style="PanelLabel.TLabel").grid(
                 row=row,
                 column=col,
                 sticky="w",
@@ -338,7 +404,11 @@ class ControlPanel(ttk.Frame):
             self.field_widgets[spec.key] = widget
         grid.columnconfigure(1, weight=1)
         grid.columnconfigure(3, weight=1)
-        self.apply_physics_button = ttk.Button(box, text="Apply Physics")
+        self.apply_physics_button = ttk.Button(
+            box,
+            text="Apply Physics",
+            style="AccentGlow.TButton",
+        )
         self.apply_physics_button.pack(fill="x", pady=(10, 4))
         ttk.Label(
             box,
@@ -346,7 +416,7 @@ class ControlPanel(ttk.Frame):
                 "Applying physics updates the live evaluation world immediately. "
                 "A running generation keeps its current settings for consistency."
             ),
-            style="Muted.TLabel",
+            style="PanelMuted.TLabel",
             wraplength=290,
             justify="left",
         ).pack(fill="x")
@@ -354,14 +424,14 @@ class ControlPanel(ttk.Frame):
 
     def _build_rewards_section(self) -> ttk.LabelFrame:
         box = self._section("Rewards and Penalties")
-        grid = ttk.Frame(box)
+        grid = ttk.Frame(box, style="PanelInner.TFrame")
         grid.pack(fill="x")
         for index, spec in enumerate(REWARD_FIELD_SPECS):
             var = spec.make_var()
             self.reward_vars[spec.key] = var
             row = index // 2
             col = (index % 2) * 2
-            ttk.Label(grid, text=spec.label).grid(
+            ttk.Label(grid, text=spec.label, style="PanelLabel.TLabel").grid(
                 row=row,
                 column=col,
                 sticky="w",
@@ -387,6 +457,7 @@ class ControlPanel(ttk.Frame):
             "textvariable": variable,
             "width": spec.width,
             "increment": spec.increment,
+            "style": "Neon.TSpinbox",
         }
         if not spec.is_integer:
             kwargs["format"] = "%.6f"
@@ -449,6 +520,10 @@ class ControlPanel(ttk.Frame):
 
     def set_session_status(self, text: str) -> None:
         self.session_status_var.set(text)
+
+    def set_evaluation_status(self, text: str, totals_text: str) -> None:
+        self.evaluation_status_var.set(text)
+        self.evaluation_totals_var.set(totals_text)
 
     def set_best_metrics(
         self,

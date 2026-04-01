@@ -251,3 +251,13 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
     - `python -m unittest discover -s tests`
     - `python run.py headless-train --generations 1 --games 4`
     - `python run.py headless-train --load checkpoint.pt --generations 1 --games 2`
+
+48. During pause-state or post-training evaluation playback, the GUI must persistently display the most recent terminal evaluation outcome until the next evaluation episode finishes.
+
+49. The evaluation outcome display must distinguish at minimum:
+    - successful landing
+    - crash
+    - offscreen loss
+    - timeout
+
+50. The GUI should also maintain visible running counts for these evaluation outcomes during the current evaluation watch session so the user can quickly judge whether the observed brain is improving.

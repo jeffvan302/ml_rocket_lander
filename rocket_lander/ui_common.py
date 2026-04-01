@@ -18,14 +18,22 @@ def lerp_color(a: str, b: str, t: float) -> str:
 
 class ScrollableFrame(ttk.Frame):
     def __init__(self, master) -> None:
-        super().__init__(master)
-        self.canvas = tk.Canvas(self, highlightthickness=0, bg="#efe6da")
+        super().__init__(master, style="Panel.TFrame")
+        self.canvas = tk.Canvas(
+            self,
+            highlightthickness=1,
+            highlightbackground="#1b2f64",
+            bg="#050816",
+            bd=0,
+            relief="flat",
+        )
         self.scrollbar = ttk.Scrollbar(
             self,
             orient="vertical",
             command=self.canvas.yview,
+            style="Panel.Vertical.TScrollbar",
         )
-        self.inner = ttk.Frame(self.canvas)
+        self.inner = ttk.Frame(self.canvas, style="Panel.TFrame")
         self.inner.bind(
             "<Configure>",
             lambda _event: self.canvas.configure(

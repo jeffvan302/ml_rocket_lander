@@ -15,7 +15,7 @@ from rocket_lander.training import (
     load_brain_checkpoint,
     save_brain_checkpoint,
 )
-from rocket_lander.ui_app import MainApplication
+from rocket_lander.ui_app import MainApplication, describe_evaluation_outcome
 from rocket_lander.validation import validate_app_config
 
 
@@ -122,6 +122,21 @@ class RocketLanderSmokeTests(unittest.TestCase):
         self.assertEqual(handled, ["paused"])
         self.assertEqual(len(scheduled), 1)
         self.assertEqual(scheduled[0][0], 100)
+
+    def test_evaluation_outcome_monitor_tracks_success_and_failure(self) -> None:
+        landed = describe_evaluation_outcome(
+            {"event": "landed", "landed": True, "score": 42.5, "speed": 1.2}
+        )
+        self.assertEqual(landed["kind"], "success")
+        self.assertEqual(landed["counter_key"], "landed")
+        self.assertIn("SUCCESS LANDING", landed["headline"])
+
+        crashed = describe_evaluation_outcome(
+            {"event": "crashed", "crashed": True, "score": -12.0, "speed": 4.6}
+        )
+        self.assertEqual(crashed["kind"], "failure")
+        self.assertEqual(crashed["counter_key"], "crashed")
+        self.assertIn("CRASH", crashed["headline"])
 
 
 if __name__ == "__main__":

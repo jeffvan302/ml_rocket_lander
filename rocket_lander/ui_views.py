@@ -14,6 +14,11 @@ class GameCanvas(tk.Canvas):
         self.training_active = False
         self.overlay_text = "Evaluating the active brain."
         self.brain_source = "best"
+        self.last_outcome_text = "Last eval: awaiting result"
+        self.last_outcome_detail = (
+            "The active brain will keep playing while training is paused."
+        )
+        self.last_outcome_kind = "neutral"
         self.bind("<Configure>", lambda _event: self.redraw())
 
     def set_snapshot(self, snapshot: dict[str, Any]) -> None:
@@ -28,6 +33,17 @@ class GameCanvas(tk.Canvas):
 
     def set_brain_source(self, source: str) -> None:
         self.brain_source = source
+        self.redraw()
+
+    def set_evaluation_outcome(
+        self,
+        text: str,
+        detail: str,
+        kind: str = "neutral",
+    ) -> None:
+        self.last_outcome_text = text
+        self.last_outcome_detail = detail
+        self.last_outcome_kind = kind
         self.redraw()
 
     def redraw(self) -> None:
@@ -120,6 +136,8 @@ class GameCanvas(tk.Canvas):
             font=("Segoe UI", 10, "bold"),
         )
 
+        self._draw_outcome_panel(width, height)
+
         if self.training_active:
             self.create_rectangle(
                 0,
@@ -138,6 +156,46 @@ class GameCanvas(tk.Canvas):
                 font=("Segoe UI", 18, "bold"),
                 justify="center",
             )
+
+    def _draw_outcome_panel(self, width: int, height: int) -> None:
+        palette = {
+            "success": ("#0e332e", "#74ffd5", "#ecfffa"),
+            "failure": ("#3c1424", "#ff7ba0", "#fff0f5"),
+            "neutral": ("#10223f", "#79d4ff", "#e8f7ff"),
+        }
+        fill, border, text_fill = palette.get(
+            self.last_outcome_kind,
+            palette["neutral"],
+        )
+        x0 = 18
+        y0 = height - 88
+        x1 = max(x0 + 220, min(width * 0.62, 408))
+        y1 = height - 18
+        self.create_rectangle(
+            x0,
+            y0,
+            x1,
+            y1,
+            fill=fill,
+            outline=border,
+            width=2,
+        )
+        self.create_text(
+            x0 + 14,
+            y0 + 16,
+            text=self.last_outcome_text,
+            fill=text_fill,
+            font=("Consolas", 10, "bold"),
+            anchor="w",
+        )
+        self.create_text(
+            x0 + 14,
+            y0 + 40,
+            text=self.last_outcome_detail,
+            fill="#d8ebff",
+            font=("Segoe UI", 9),
+            anchor="w",
+        )
 
     def _gradient_background(self, width: int, height: int) -> None:
         steps = 30
@@ -270,7 +328,7 @@ class GameCanvas(tk.Canvas):
 
 class GraphCanvas(tk.Canvas):
     def __init__(self, master) -> None:
-        super().__init__(master, highlightthickness=0, bg="#fff8ef")
+        super().__init__(master, highlightthickness=0, bg="#08101f")
         self.history: list[Any] = []
         self.bind("<Configure>", lambda _event: self.redraw())
 
@@ -283,7 +341,7 @@ class GraphCanvas(tk.Canvas):
         width = max(self.winfo_width(), 10)
         height = max(self.winfo_height(), 10)
         for index in range(24):
-            color = lerp_color("#fff8ef", "#e7f4f1", index / 23)
+            color = lerp_color("#08101f", "#101c34", index / 23)
             self.create_rectangle(
                 0,
                 height * index / 24,
@@ -296,8 +354,8 @@ class GraphCanvas(tk.Canvas):
             20,
             20,
             text="Training Progress",
-            fill="#16303f",
-            font=("Segoe UI", 12, "bold"),
+            fill="#6ff7ff",
+            font=("Consolas", 12, "bold"),
             anchor="w",
         )
 
@@ -309,7 +367,7 @@ class GraphCanvas(tk.Canvas):
                     "Landing rate, generation best score, and mean score "
                     "appear here after training starts."
                 ),
-                fill="#4d5d68",
+                fill="#87a2cf",
                 font=("Segoe UI", 11),
                 width=width * 0.8,
                 justify="center",
@@ -326,7 +384,10 @@ class GraphCanvas(tk.Canvas):
         landing_rates = [float(item.landing_rate) for item in self.history]
         best_scores = [float(item.best_score) for item in self.history]
         mean_scores = [float(item.mean_score) for item in self.history]
-        self._draw_series(upper, landing_rates, 0.0, 1.0, "#0c8f78")
+        landing_rate_color = "#50f6ff"
+        best_score_color = "#ffab4f"
+        mean_score_color = "#ff74f7"
+        self._draw_series(upper, landing_rates, 0.0, 1.0, landing_rate_color)
 
         score_min = min(best_scores + mean_scores + [0.0])
         score_max = max(best_scores + mean_scores + [1.0])
@@ -338,42 +399,42 @@ class GraphCanvas(tk.Canvas):
             best_scores,
             score_min - pad,
             score_max + pad,
-            "#d3663a",
+            best_score_color,
         )
         self._draw_series(
             lower,
             mean_scores,
             score_min - pad,
             score_max + pad,
-            "#2b79c2",
+            mean_score_color,
         )
 
-        self.create_text(18, upper[1], text="100%", fill="#22414d", font=("Segoe UI", 9), anchor="w")
-        self.create_text(18, upper[3] - 2, text="0%", fill="#22414d", font=("Segoe UI", 9), anchor="sw")
-        self.create_text(18, lower[1], text=f"{score_max + pad:.0f}", fill="#22414d", font=("Segoe UI", 9), anchor="w")
-        self.create_text(18, lower[3] - 2, text=f"{score_min - pad:.0f}", fill="#22414d", font=("Segoe UI", 9), anchor="sw")
-        self.create_text(20, upper[1] - 14, text="Landing rate", fill="#16303f", font=("Segoe UI", 10, "bold"), anchor="w")
-        self.create_text(20, lower[1] - 14, text="Generation best and mean score", fill="#16303f", font=("Segoe UI", 10, "bold"), anchor="w")
+        self.create_text(18, upper[1], text="100%", fill="#8db3d1", font=("Segoe UI", 9), anchor="w")
+        self.create_text(18, upper[3] - 2, text="0%", fill="#8db3d1", font=("Segoe UI", 9), anchor="sw")
+        self.create_text(18, lower[1], text=f"{score_max + pad:.0f}", fill="#8db3d1", font=("Segoe UI", 9), anchor="w")
+        self.create_text(18, lower[3] - 2, text=f"{score_min - pad:.0f}", fill="#8db3d1", font=("Segoe UI", 9), anchor="sw")
+        self.create_text(20, upper[1] - 14, text="Landing rate", fill="#72f7ff", font=("Consolas", 10, "bold"), anchor="w")
+        self.create_text(20, lower[1] - 14, text="Generation best and mean score", fill="#72f7ff", font=("Consolas", 10, "bold"), anchor="w")
 
         legend = [
-            ("Landing rate", "#0c8f78", f"{landing_rates[-1] * 100:.1f}%"),
-            ("Best score", "#d3663a", f"{best_scores[-1]:.1f}"),
-            ("Mean score", "#2b79c2", f"{mean_scores[-1]:.1f}"),
+            ("Landing rate", landing_rate_color, f"{landing_rates[-1] * 100:.1f}%"),
+            ("Best score", best_score_color, f"{best_scores[-1]:.1f}"),
+            ("Mean score", mean_score_color, f"{mean_scores[-1]:.1f}"),
         ]
-        self.create_rectangle(width - 220, 12, width - 16, 80, fill="#ffffff", outline="")
+        self.create_rectangle(width - 220, 12, width - 16, 80, fill="#0b1630", outline="#244c88")
         for index, (label, color, value) in enumerate(legend):
             y = 28 + index * 18
             self.create_oval(width - 208, y - 4, width - 200, y + 4, fill=color, outline="")
-            self.create_text(width - 194, y, text=label, fill="#193542", font=("Segoe UI", 9), anchor="w")
-            self.create_text(width - 26, y, text=value, fill="#193542", font=("Segoe UI", 9), anchor="e")
+            self.create_text(width - 194, y, text=label, fill="#cfe7ff", font=("Segoe UI", 9), anchor="w")
+            self.create_text(width - 26, y, text=value, fill="#cfe7ff", font=("Segoe UI", 9), anchor="e")
 
     def _draw_plot_box(self, x0: float, y0: float, x1: float, y1: float) -> None:
-        self.create_rectangle(x0, y0, x1, y1, fill="#ffffff", outline="#c2d7d8")
+        self.create_rectangle(x0, y0, x1, y1, fill="#081121", outline="#244c88")
 
     def _draw_grid(self, x0: float, y0: float, x1: float, y1: float) -> None:
         for index in range(1, 4):
             y = y0 + (y1 - y0) * index / 4
-            self.create_line(x0, y, x1, y, fill="#d4e1e3", dash=(4, 3))
+            self.create_line(x0, y, x1, y, fill="#16365e", dash=(4, 3))
 
     def _draw_series(
         self,
@@ -428,7 +489,7 @@ class NetworkCanvas(tk.Canvas):
         width = max(self.winfo_width(), 10)
         height = max(self.winfo_height(), 10)
         for index in range(26):
-            color = lerp_color("#0b1723", "#122b3a", index / 25)
+            color = lerp_color("#060d18", "#101d35", index / 25)
             self.create_rectangle(
                 0,
                 height * index / 26,
@@ -441,8 +502,8 @@ class NetworkCanvas(tk.Canvas):
             18,
             22,
             text=self.title,
-            fill="#f4f7f9",
-            font=("Segoe UI", 12, "bold"),
+            fill="#72f7ff",
+            font=("Consolas", 12, "bold"),
             anchor="w",
         )
 
@@ -451,7 +512,7 @@ class NetworkCanvas(tk.Canvas):
                 width / 2,
                 height / 2,
                 text="The actor network will appear here once a brain is available.",
-                fill="#afc2ce",
+                fill="#8aa5c8",
                 font=("Segoe UI", 11),
                 width=width * 0.8,
                 justify="center",
@@ -479,7 +540,7 @@ class NetworkCanvas(tk.Canvas):
                 for in_idx, left_point in enumerate(layers[layer_index]):
                     weight = float(matrix[out_idx][in_idx])
                     norm = abs(weight) / max_abs
-                    color = "#32c6be" if weight >= 0 else "#f48f4d"
+                    color = "#4af7ff" if weight >= 0 else "#ff74f7"
                     width_px = 0.6 + 2.8 * (norm ** 1.3)
                     kwargs = {
                         "fill": color,
@@ -500,12 +561,28 @@ class NetworkCanvas(tk.Canvas):
         radius = layout["radius"]
         for layer_index, layer_points in enumerate(layers):
             for node_index, (x, y) in enumerate(layer_points):
-                fill = (
-                    "#1e7f95"
+                glow = radius + 3
+                glow_fill = (
+                    "#123d4d"
                     if layer_index == 0
-                    else "#f0a95a"
+                    else "#4b214d"
                     if layer_index == len(layers) - 1
-                    else "#d6edf7"
+                    else "#18355d"
+                )
+                self.create_oval(
+                    x - glow,
+                    y - glow,
+                    x + glow,
+                    y + glow,
+                    fill=glow_fill,
+                    outline="",
+                )
+                fill = (
+                    "#2ae8ff"
+                    if layer_index == 0
+                    else "#ff74f7"
+                    if layer_index == len(layers) - 1
+                    else "#d7edff"
                 )
                 self.create_oval(
                     x - radius,
@@ -513,14 +590,14 @@ class NetworkCanvas(tk.Canvas):
                     x + radius,
                     y + radius,
                     fill=fill,
-                    outline="#d9f3f1",
+                    outline="#f3fbff",
                 )
                 if layer_index == 0 and node_index < len(input_names):
                     self.create_text(
                         left - 12,
                         y,
                         text=input_names[node_index],
-                        fill="#dceaf1",
+                        fill="#cce4ff",
                         font=("Segoe UI", 8),
                         anchor="e",
                     )
@@ -529,7 +606,7 @@ class NetworkCanvas(tk.Canvas):
                         right + 12,
                         y,
                         text=output_names[node_index],
-                        fill="#fff2de",
+                        fill="#ffd3fb",
                         font=("Segoe UI", 8),
                         anchor="w",
                     )
@@ -543,15 +620,15 @@ class NetworkCanvas(tk.Canvas):
                 34,
                 x + 32,
                 56,
-                fill="#1b3440",
-                outline="#a0d9d4",
+                fill="#0f1c34",
+                outline="#2eeeff",
             )
             self.create_text(
                 x,
                 45,
                 text=activation,
-                fill="#e5f4f4",
-                font=("Segoe UI", 9, "bold"),
+                fill="#e8fbff",
+                font=("Consolas", 9, "bold"),
             )
 
         topology = " -> ".join(str(size) for size in layer_sizes)
@@ -559,8 +636,8 @@ class NetworkCanvas(tk.Canvas):
             18,
             height - 38,
             text=f"Topology: {topology}",
-            fill="#c8e0e8",
-            font=("Segoe UI", 9),
+            fill="#b9d7ff",
+            font=("Consolas", 9),
             anchor="w",
         )
         if log_std:
@@ -569,8 +646,8 @@ class NetworkCanvas(tk.Canvas):
                 18,
                 height - 18,
                 text=f"Policy log std: {log_std_text}",
-                fill="#c8e0e8",
-                font=("Segoe UI", 9),
+                fill="#b9d7ff",
+                font=("Consolas", 9),
                 anchor="w",
             )
 

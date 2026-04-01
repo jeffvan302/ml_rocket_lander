@@ -106,12 +106,53 @@ class TrainingBridge:
             self.session.request_stop()
 
 
+def describe_evaluation_outcome(info: dict[str, Any]) -> dict[str, str]:
+    event = str(info.get("event", "unknown"))
+    speed = float(info.get("speed", 0.0))
+    score = float(info.get("score", 0.0))
+
+    if info.get("landed"):
+        return {
+            "kind": "success",
+            "headline": "Last eval: SUCCESS LANDING",
+            "detail": f"Event landed | score {score:.1f} | speed {speed:.2f}",
+            "counter_key": "landed",
+        }
+    if info.get("crashed") or event == "crashed":
+        return {
+            "kind": "failure",
+            "headline": "Last eval: CRASH",
+            "detail": f"Event crashed | score {score:.1f} | speed {speed:.2f}",
+            "counter_key": "crashed",
+        }
+    if info.get("offscreen") or event == "offscreen":
+        return {
+            "kind": "failure",
+            "headline": "Last eval: OFFSCREEN",
+            "detail": f"Event offscreen | score {score:.1f} | speed {speed:.2f}",
+            "counter_key": "offscreen",
+        }
+    if info.get("timeout") or event == "timeout":
+        return {
+            "kind": "failure",
+            "headline": "Last eval: TIMEOUT",
+            "detail": f"Event timeout | score {score:.1f} | speed {speed:.2f}",
+            "counter_key": "timeout",
+        }
+    return {
+        "kind": "neutral",
+        "headline": f"Last eval: {event.upper()}",
+        "detail": f"Score {score:.1f} | speed {speed:.2f}",
+        "counter_key": "other",
+    }
+
+
 class MainApplication:
     def __init__(self, startup_payload: dict[str, Any] | None = None) -> None:
         self.root = tk.Tk()
         self.root.title("Rocket Landing Lab")
         self.root.geometry("1680x980")
-        self.root.configure(bg="#efe6da")
+        self.root.configure(bg="#050816")
         self._configure_style()
 
         self.config = AppConfig()
@@ -130,6 +171,12 @@ class MainApplication:
             seed=self.config.ppo.seed,
         )
         self.eval_observation = None
+        self.eval_outcome_counts = {
+            "landed": 0,
+            "crashed": 0,
+            "offscreen": 0,
+            "timeout": 0,
+        }
         self.training_bridge: TrainingBridge | None = None
         self.pause_pending = False
         self.status_var = tk.StringVar(value="Ready.")
@@ -154,36 +201,242 @@ class MainApplication:
     def _configure_style(self) -> None:
         style = ttk.Style(self.root)
         style.theme_use("clam")
-        style.configure("TFrame", background="#efe6da")
-        style.configure("TLabelframe", background="#f5efe5", bordercolor="#d8d0c2")
+        bg_app = "#050816"
+        bg_shell = "#070d1b"
+        bg_panel = "#0b1430"
+        bg_panel_alt = "#101c3d"
+        bg_field = "#081121"
+        border = "#244c88"
+        border_soft = "#162f56"
+        text_main = "#dceaff"
+        text_muted = "#87a2cf"
+        neon_cyan = "#6ef7ff"
+        neon_pink = "#ff74f7"
+        neon_lime = "#a8ff6b"
+        neon_amber = "#ffb85e"
+        neon_red = "#ff7c91"
+
+        def configure_glow_button(
+            style_name: str,
+            foreground: str,
+            background: str,
+            bordercolor: str,
+            active_background: str,
+        ) -> None:
+            style.configure(
+                style_name,
+                padding=(12, 10),
+                font=("Consolas", 10, "bold"),
+                foreground=foreground,
+                background=background,
+                bordercolor=bordercolor,
+                lightcolor=bordercolor,
+                darkcolor=background,
+                focuscolor=bordercolor,
+                relief="solid",
+                borderwidth=2,
+            )
+            style.map(
+                style_name,
+                foreground=[
+                    ("disabled", "#566680"),
+                    ("pressed", foreground),
+                    ("active", foreground),
+                ],
+                background=[
+                    ("disabled", "#0a1220"),
+                    ("pressed", active_background),
+                    ("active", active_background),
+                ],
+                bordercolor=[
+                    ("disabled", border_soft),
+                    ("pressed", bordercolor),
+                    ("active", bordercolor),
+                ],
+                lightcolor=[
+                    ("disabled", border_soft),
+                    ("pressed", bordercolor),
+                    ("active", bordercolor),
+                ],
+            )
+
+        style.configure("TFrame", background=bg_shell)
+        style.configure("Panel.TFrame", background=bg_app)
+        style.configure("PanelInner.TFrame", background=bg_panel)
+        style.configure("StatusBar.TFrame", background=bg_app)
+        style.configure("TPanedwindow", background=bg_app)
+        style.configure("TLabel", background=bg_shell, foreground=text_main)
+        style.configure(
+            "TLabelframe",
+            background=bg_shell,
+            bordercolor=border,
+            lightcolor=border,
+            darkcolor=bg_shell,
+        )
         style.configure(
             "TLabelframe.Label",
-            background="#f5efe5",
-            foreground="#18323e",
+            background=bg_shell,
+            foreground=text_main,
             font=("Segoe UI", 10, "bold"),
         )
-        style.configure("TLabel", background="#efe6da", foreground="#18323e")
-        style.configure("Muted.TLabel", background="#f5efe5", foreground="#5b6b73")
         style.configure(
             "Title.TLabel",
-            background="#efe6da",
-            foreground="#18323e",
-            font=("Segoe UI", 16, "bold"),
+            background=bg_app,
+            foreground=neon_cyan,
+            font=("Consolas", 18, "bold"),
         )
         style.configure(
-            "Card.TLabel",
-            background="#f7fafb",
-            foreground="#17303e",
-            padding=8,
-            relief="flat",
+            "HeroMuted.TLabel",
+            background=bg_app,
+            foreground=text_muted,
+            font=("Segoe UI", 10),
         )
-        style.configure("TButton", padding=8)
+        style.configure(
+            "Panel.TLabelframe",
+            background=bg_panel,
+            bordercolor=border,
+            lightcolor=border,
+            darkcolor=border_soft,
+            relief="solid",
+            borderwidth=2,
+        )
+        style.configure(
+            "Panel.TLabelframe.Label",
+            background=bg_panel,
+            foreground=neon_pink,
+            font=("Consolas", 10, "bold"),
+        )
+        style.configure(
+            "PanelLabel.TLabel",
+            background=bg_panel,
+            foreground=neon_cyan,
+            font=("Segoe UI", 9, "bold"),
+        )
+        style.configure(
+            "PanelMuted.TLabel",
+            background=bg_panel,
+            foreground=text_muted,
+            font=("Segoe UI", 9),
+        )
+        style.configure(
+            "MetricCard.TLabel",
+            background=bg_panel_alt,
+            foreground=text_main,
+            padding=10,
+            relief="solid",
+            borderwidth=1,
+        )
+        style.configure(
+            "Status.TLabel",
+            background=bg_app,
+            foreground="#7fcfff",
+            font=("Segoe UI", 9),
+        )
+        style.configure(
+            "Panel.TRadiobutton",
+            background=bg_panel,
+            foreground=neon_lime,
+            indicatorcolor=neon_lime,
+            font=("Consolas", 10, "bold"),
+        )
+        style.map(
+            "Panel.TRadiobutton",
+            foreground=[
+                ("selected", neon_lime),
+                ("active", "#d8ffb3"),
+                ("!selected", "#93b9b9"),
+            ],
+            background=[("active", bg_panel)],
+            indicatorcolor=[
+                ("selected", neon_lime),
+                ("!selected", "#324669"),
+            ],
+        )
+        style.configure(
+            "Neon.TSpinbox",
+            foreground=text_main,
+            fieldbackground=bg_field,
+            background=bg_panel_alt,
+            arrowcolor=neon_cyan,
+            bordercolor=border,
+            lightcolor=border,
+            darkcolor=border_soft,
+            insertcolor=neon_cyan,
+            padding=4,
+        )
+        style.map(
+            "Neon.TSpinbox",
+            fieldbackground=[("readonly", bg_field), ("disabled", "#09101b")],
+            foreground=[("disabled", "#53657c")],
+            bordercolor=[("focus", neon_cyan), ("active", border)],
+        )
+        style.configure(
+            "Neon.TCombobox",
+            foreground=text_main,
+            fieldbackground=bg_field,
+            background=bg_panel_alt,
+            arrowcolor=neon_pink,
+            bordercolor=border,
+            lightcolor=border,
+            darkcolor=border_soft,
+            padding=4,
+        )
+        style.map(
+            "Neon.TCombobox",
+            fieldbackground=[("readonly", bg_field), ("disabled", "#09101b")],
+            foreground=[("disabled", "#53657c")],
+            bordercolor=[("focus", neon_pink), ("active", border)],
+            arrowcolor=[("active", "#ffacf7")],
+        )
+        style.configure(
+            "Panel.Vertical.TScrollbar",
+            troughcolor="#060d1e",
+            background=bg_panel_alt,
+            bordercolor=border_soft,
+            arrowcolor=neon_cyan,
+            darkcolor=bg_panel_alt,
+            lightcolor=border,
+        )
+        style.map(
+            "Panel.Vertical.TScrollbar",
+            background=[("active", "#173460")],
+            arrowcolor=[("active", "#b5ffff")],
+        )
+
+        configure_glow_button(
+            "PrimaryGlow.TButton",
+            neon_cyan,
+            "#122240",
+            "#3cf3ff",
+            "#18355f",
+        )
+        configure_glow_button(
+            "SecondaryGlow.TButton",
+            neon_amber,
+            "#2f1d07",
+            "#ffb85e",
+            "#4a2b09",
+        )
+        configure_glow_button(
+            "AccentGlow.TButton",
+            neon_lime,
+            "#112710",
+            "#7dff85",
+            "#193817",
+        )
+        configure_glow_button(
+            "DangerGlow.TButton",
+            neon_red,
+            "#32111f",
+            "#ff5f8f",
+            "#4a1830",
+        )
 
     def _build_layout(self) -> None:
         main = ttk.Panedwindow(self.root, orient=tk.HORIZONTAL)
         main.pack(fill="both", expand=True, padx=8, pady=8)
 
-        left_wrapper = ttk.Frame(main, width=360)
+        left_wrapper = ttk.Frame(main, width=360, style="Panel.TFrame")
         left_wrapper.pack_propagate(False)
         self.scrollable = ScrollableFrame(left_wrapper)
         self.scrollable.pack(fill="both", expand=True)
@@ -210,16 +463,51 @@ class MainApplication:
         self.network_canvas = NetworkCanvas(center_right)
         center_right.add(self.network_canvas, weight=2)
 
-        status_bar = ttk.Frame(self.root, padding=(10, 4))
+        status_bar = ttk.Frame(self.root, padding=(10, 4), style="StatusBar.TFrame")
         status_bar.pack(fill="x")
         ttk.Label(
             status_bar,
             textvariable=self.status_var,
-            style="Muted.TLabel",
+            style="Status.TLabel",
         ).pack(anchor="w")
 
     def _set_status(self, text: str) -> None:
         self.status_var.set(text)
+
+    def _evaluation_totals_text(self) -> str:
+        counts = self.eval_outcome_counts
+        return (
+            f"Landings {counts['landed']} | "
+            f"Crashes {counts['crashed']} | "
+            f"Offscreen {counts['offscreen']} | "
+            f"Timeouts {counts['timeout']}"
+        )
+
+    def _reset_evaluation_monitor(self) -> None:
+        self.eval_outcome_counts = {
+            "landed": 0,
+            "crashed": 0,
+            "offscreen": 0,
+            "timeout": 0,
+        }
+        headline = "Last eval: awaiting result"
+        detail = "The active brain will keep playing while training is paused."
+        totals = self._evaluation_totals_text()
+        self.control_panel.set_evaluation_status(headline, totals)
+        self.game_canvas.set_evaluation_outcome(headline, detail, kind="neutral")
+
+    def _record_evaluation_outcome(self, info: dict[str, Any]) -> None:
+        outcome = describe_evaluation_outcome(info)
+        counter_key = outcome["counter_key"]
+        if counter_key in self.eval_outcome_counts:
+            self.eval_outcome_counts[counter_key] += 1
+        totals = self._evaluation_totals_text()
+        self.control_panel.set_evaluation_status(outcome["headline"], totals)
+        self.game_canvas.set_evaluation_outcome(
+            outcome["headline"],
+            outcome["detail"],
+            kind=outcome["kind"],
+        )
 
     def _default_normalizer_state(self) -> dict[str, Any]:
         return clone_normalizer_state(
@@ -393,6 +681,7 @@ class MainApplication:
             seed=self.config.ppo.seed,
         )
         self.eval_observation = self.eval_env.reset(dramatic=True)
+        self._reset_evaluation_monitor()
         self.game_canvas.set_snapshot(self.eval_env.snapshot())
 
     def _evaluation_tick(self) -> None:
@@ -415,8 +704,9 @@ class MainApplication:
                 device="cpu",
                 deterministic=True,
             )
-            self.eval_observation, _, done, _ = self.eval_env.step(action)
+            self.eval_observation, _, done, info = self.eval_env.step(action)
             if done:
+                self._record_evaluation_outcome(info)
                 self.eval_observation = self.eval_env.reset(dramatic=True)
             self.game_canvas.set_snapshot(self.eval_env.snapshot())
 
