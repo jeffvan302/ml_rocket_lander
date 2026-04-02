@@ -16,6 +16,10 @@ from rocket_lander.training import (
     save_brain_checkpoint,
 )
 from rocket_lander.ui_app import MainApplication, describe_evaluation_outcome
+from rocket_lander.ui_controls import (
+    adaptive_grid_columns_for_width,
+    compact_panel_mode_for_width,
+)
 from rocket_lander.validation import validate_app_config
 
 
@@ -128,6 +132,16 @@ class RocketLanderSmokeTests(unittest.TestCase):
         self.assertTrue(
             any("Gravity list values must be positive" in error for error in validation.errors)
         )
+
+    def test_adaptive_control_panel_columns_switch_by_width(self) -> None:
+        self.assertEqual(adaptive_grid_columns_for_width(260), 1)
+        self.assertEqual(adaptive_grid_columns_for_width(320), 2)
+        self.assertEqual(adaptive_grid_columns_for_width(520), 2)
+
+    def test_compact_panel_mode_switches_by_width(self) -> None:
+        self.assertTrue(compact_panel_mode_for_width(260))
+        self.assertFalse(compact_panel_mode_for_width(320))
+        self.assertFalse(compact_panel_mode_for_width(520))
 
     def test_poll_training_queue_survives_bridge_reset(self) -> None:
         app = object.__new__(MainApplication)

@@ -92,11 +92,23 @@ REWARD_FIELD_SPECS = [
     FieldSpec("spin_penalty", "Spin penalty", -5000.0, 5000.0, 0.1, float, 10),
 ]
 
+ADAPTIVE_TWO_COLUMN_MIN_WIDTH = 320
+COMPACT_PANEL_WIDTH = 320
+
+
+def adaptive_grid_columns_for_width(width: int) -> int:
+    return 2 if width >= ADAPTIVE_TWO_COLUMN_MIN_WIDTH else 1
+
+
+def compact_panel_mode_for_width(width: int) -> bool:
+    return width < COMPACT_PANEL_WIDTH
+
 
 class LayerEditor(ttk.Frame):
     def __init__(self, master, layers: list[LayerConfig]) -> None:
         super().__init__(master, style="PanelInner.TFrame")
         self.rows: list[dict[str, Any]] = []
+        self.compact_layout = False
         self.rows_frame = ttk.Frame(self, style="PanelInner.TFrame")
         self.rows_frame.pack(fill="x", expand=True)
         ttk.Button(
@@ -122,36 +134,40 @@ class LayerEditor(ttk.Frame):
         label.pack(side="left")
         units_var = tk.IntVar(value=units)
         activation_var = tk.StringVar(value=activation)
-        ttk.Spinbox(
+        units_widget = ttk.Spinbox(
             row_frame,
             from_=1,
             to=256,
             textvariable=units_var,
             width=8,
             style="Neon.TSpinbox",
-        ).pack(side="left", padx=4)
-        ttk.Combobox(
+        )
+        activation_widget = ttk.Combobox(
             row_frame,
             values=ACTIVATION_OPTIONS,
             textvariable=activation_var,
             state="readonly",
             width=12,
             style="Neon.TCombobox",
-        ).pack(side="left", padx=4)
-        ttk.Button(
+        )
+        remove_button = ttk.Button(
             row_frame,
             text="Remove",
             style="DangerGlow.TButton",
             command=lambda: self.remove_row(row_frame),
-        ).pack(side="left", padx=4)
+        )
         self.rows.append(
             {
                 "frame": row_frame,
                 "label": label,
                 "units": units_var,
                 "activation": activation_var,
+                "units_widget": units_widget,
+                "activation_widget": activation_widget,
+                "remove_button": remove_button,
             }
         )
+        self._layout_row(self.rows[-1])
         self._sync_labels()
 
     def remove_row(self, row_frame) -> None:
@@ -167,6 +183,29 @@ class LayerEditor(ttk.Frame):
     def _sync_labels(self) -> None:
         for index, row in enumerate(self.rows):
             row["label"].configure(text=f"Layer {index + 1}")
+
+    def _layout_row(self, row: dict[str, Any]) -> None:
+        row["label"].pack_forget()
+        row["units_widget"].pack_forget()
+        row["activation_widget"].pack_forget()
+        row["remove_button"].pack_forget()
+        if self.compact_layout:
+            row["label"].pack(anchor="w")
+            row["units_widget"].pack(fill="x", pady=(4, 0))
+            row["activation_widget"].pack(fill="x", pady=(4, 0))
+            row["remove_button"].pack(anchor="e", pady=(6, 0))
+        else:
+            row["label"].pack(side="left")
+            row["units_widget"].pack(side="left", padx=4)
+            row["activation_widget"].pack(side="left", padx=4)
+            row["remove_button"].pack(side="left", padx=4)
+
+    def set_compact(self, compact: bool) -> None:
+        if self.compact_layout == compact:
+            return
+        self.compact_layout = compact
+        for row in self.rows:
+            self._layout_row(row)
 
     def get_layers(self) -> list[LayerConfig]:
         return [
@@ -192,6 +231,12 @@ class ControlPanel(ttk.Frame):
         self.physics_vars: dict[str, tk.Variable] = {}
         self.reward_vars: dict[str, tk.Variable] = {}
         self.field_widgets: dict[str, ttk.Spinbox] = {}
+        self.physics_item_frames: list[ttk.Frame] = []
+        self.reward_item_frames: list[ttk.Frame] = []
+        self.physics_grid: ttk.Frame | None = None
+        self.reward_grid: ttk.Frame | None = None
+        self._layout_after_id: str | None = None
+        self._compact_mode = False
         self.brain_source_var = tk.StringVar(value="best")
         self.gravity_multi_var = tk.BooleanVar(value=False)
         self.gravity_values_var = tk.StringVar(value="")
@@ -221,16 +266,18 @@ class ControlPanel(ttk.Frame):
             value="Latest generation: n/a\nPolicy loss / value loss / entropy: n/a"
         )
 
-        ttk.Label(self, text="Rocket Landing Lab", style="Title.TLabel").pack(
+        self.title_label = ttk.Label(self, text="Rocket Landing Lab", style="Title.TLabel")
+        self.title_label.pack(
             anchor="w"
         )
-        ttk.Label(
+        self.subtitle_label = ttk.Label(
             self,
             text="Tune the lander, shape the rewards, and train a PPO brain.",
             style="HeroMuted.TLabel",
             wraplength=300,
             justify="left",
-        ).pack(anchor="w", pady=(2, 12))
+        )
+        self.subtitle_label.pack(anchor="w", pady=(2, 12))
 
         self._build_monitor_section().pack(fill="x", pady=(0, 6))
         self._build_session_section().pack(fill="x", pady=6)
@@ -240,6 +287,8 @@ class ControlPanel(ttk.Frame):
         self._build_physics_section().pack(fill="x", pady=6)
         self._build_rewards_section().pack(fill="x", pady=6)
         self.set_config(config)
+        self.bind("<Configure>", lambda _event: self._schedule_responsive_layout())
+        self._schedule_responsive_layout()
 
     def _section(self, title: str) -> ttk.LabelFrame:
         return ttk.LabelFrame(
@@ -269,89 +318,95 @@ class ControlPanel(ttk.Frame):
         self.start_button.pack(fill="x", pady=3)
         self.pause_button.pack(fill="x", pady=3)
         self.stop_button.pack(fill="x", pady=3)
-        ttk.Label(
+        self.session_status_label = ttk.Label(
             box,
             textvariable=self.session_status_var,
             style="PanelMuted.TLabel",
             wraplength=290,
             justify="left",
-        ).pack(fill="x", pady=(8, 0))
+        )
+        self.session_status_label.pack(fill="x", pady=(8, 0))
         return box
 
     def _build_monitor_section(self) -> ttk.LabelFrame:
         box = self._section("Live Monitor")
-        ttk.Label(
+        self.telemetry_label = ttk.Label(
             box,
             textvariable=self.telemetry_var,
             style="MetricCard.TLabel",
             justify="left",
             anchor="w",
-        ).pack(fill="x", pady=(0, 8))
-        ttk.Label(
+        )
+        self.telemetry_label.pack(fill="x", pady=(0, 8))
+        self.evaluation_label = ttk.Label(
             box,
             textvariable=self.evaluation_status_var,
             style="MetricCard.TLabel",
             wraplength=290,
             justify="left",
             anchor="w",
-        ).pack(fill="x", pady=(0, 6))
-        ttk.Label(
+        )
+        self.evaluation_label.pack(fill="x", pady=(0, 6))
+        self.evaluation_totals_label = ttk.Label(
             box,
             textvariable=self.evaluation_totals_var,
             style="PanelMuted.TLabel",
             wraplength=290,
             justify="left",
-        ).pack(fill="x")
+        )
+        self.evaluation_totals_label.pack(fill="x")
         return box
 
     def _build_brain_section(self) -> ttk.LabelFrame:
         box = self._section("Brains")
-        radio_row = ttk.Frame(box, style="PanelInner.TFrame")
-        radio_row.pack(fill="x", pady=(0, 8))
-        ttk.Radiobutton(
-            radio_row,
+        self.radio_row = ttk.Frame(box, style="PanelInner.TFrame")
+        self.radio_row.pack(fill="x", pady=(0, 8))
+        self.current_brain_radio = ttk.Radiobutton(
+            self.radio_row,
             text="Current",
             variable=self.brain_source_var,
             value="current",
             style="Panel.TRadiobutton",
-        ).pack(side="left")
-        ttk.Radiobutton(
-            radio_row,
+        )
+        self.best_brain_radio = ttk.Radiobutton(
+            self.radio_row,
             text="Best so far",
             variable=self.brain_source_var,
             value="best",
             style="Panel.TRadiobutton",
-        ).pack(side="left", padx=(12, 0))
+        )
+        self._layout_brain_source_controls(compact=False)
 
-        button_row = ttk.Frame(box, style="PanelInner.TFrame")
-        button_row.pack(fill="x")
+        self.button_row = ttk.Frame(box, style="PanelInner.TFrame")
+        self.button_row.pack(fill="x")
         self.save_button = ttk.Button(
-            button_row,
+            self.button_row,
             text="Save Session",
             style="AccentGlow.TButton",
         )
         self.load_button = ttk.Button(
-            button_row,
+            self.button_row,
             text="Load Session",
             style="PrimaryGlow.TButton",
         )
-        self.save_button.pack(side="left", fill="x", expand=True, padx=(0, 4))
-        self.load_button.pack(side="left", fill="x", expand=True, padx=(4, 0))
+        self._layout_brain_action_buttons(compact=False)
 
-        ttk.Label(
+        self.best_metrics_label = ttk.Label(
             box,
             textvariable=self.best_metrics_var,
             style="MetricCard.TLabel",
             justify="left",
             anchor="w",
-        ).pack(fill="x", pady=(10, 6))
-        ttk.Label(
+        )
+        self.best_metrics_label.pack(fill="x", pady=(10, 6))
+        self.current_metrics_label = ttk.Label(
             box,
             textvariable=self.current_metrics_var,
             style="MetricCard.TLabel",
             justify="left",
             anchor="w",
-        ).pack(fill="x")
+        )
+        self.current_metrics_label.pack(fill="x")
         return box
 
     def _build_training_section(self) -> ttk.LabelFrame:
@@ -379,25 +434,26 @@ class ControlPanel(ttk.Frame):
         ttk.Label(box, text="Hidden layers", style="PanelLabel.TLabel").pack(anchor="w")
         self.layer_editor = LayerEditor(box, config.network.hidden_layers)
         self.layer_editor.pack(fill="x", pady=(4, 8))
-        output_row = ttk.Frame(box, style="PanelInner.TFrame")
-        output_row.pack(fill="x")
-        ttk.Label(
-            output_row,
+        self.output_row = ttk.Frame(box, style="PanelInner.TFrame")
+        self.output_row.pack(fill="x")
+        self.output_activation_label = ttk.Label(
+            self.output_row,
             text="Output activation",
             style="PanelLabel.TLabel",
-        ).pack(side="left")
+        )
         self.output_activation_var = tk.StringVar(
             value=config.network.output_activation
         )
-        ttk.Combobox(
-            output_row,
+        self.output_activation_combo = ttk.Combobox(
+            self.output_row,
             values=ACTIVATION_OPTIONS,
             textvariable=self.output_activation_var,
             state="readonly",
             width=12,
             style="Neon.TCombobox",
-        ).pack(side="right")
-        ttk.Label(
+        )
+        self._layout_output_row(compact=False)
+        self.network_help_label = ttk.Label(
             box,
             text=(
                 "The actor outputs throttle and gimbal actions. "
@@ -406,43 +462,26 @@ class ControlPanel(ttk.Frame):
             style="PanelMuted.TLabel",
             wraplength=290,
             justify="left",
-        ).pack(fill="x", pady=(8, 0))
+        )
+        self.network_help_label.pack(fill="x", pady=(8, 0))
         return box
 
     def _build_physics_section(self) -> ttk.LabelFrame:
         box = self._section("Physics, Spawn, and Landing")
-        grid = ttk.Frame(box, style="PanelInner.TFrame")
-        grid.pack(fill="x")
-        for index, spec in enumerate(PHYSICS_FIELD_SPECS):
+        self.physics_grid = ttk.Frame(box, style="PanelInner.TFrame")
+        self.physics_grid.pack(fill="x")
+        self.physics_item_frames.clear()
+        for spec in PHYSICS_FIELD_SPECS:
             var = spec.make_var()
             self.physics_vars[spec.key] = var
-            row = index // 2
-            col = (index % 2) * 2
-            ttk.Label(grid, text=spec.label, style="PanelLabel.TLabel").grid(
-                row=row,
-                column=col,
-                sticky="w",
-                padx=(0, 8),
-                pady=3,
+            item, widget = self._create_field_item(
+                self.physics_grid,
+                spec,
+                var,
+                with_gravity_toggle=(spec.key == "gravity"),
             )
-            if spec.key == "gravity":
-                gravity_row = ttk.Frame(grid, style="PanelInner.TFrame")
-                gravity_row.grid(row=row, column=col + 1, sticky="ew", pady=3)
-                widget = self._create_spinbox(gravity_row, spec, var)
-                widget.pack(side="left", fill="x", expand=True)
-                ttk.Button(
-                    gravity_row,
-                    text="⚙",
-                    width=3,
-                    style="SecondaryGlow.TButton",
-                    command=self._toggle_gravity_mode,
-                ).pack(side="left", padx=(6, 0))
-            else:
-                widget = self._create_spinbox(grid, spec, var)
-                widget.grid(row=row, column=col + 1, sticky="ew", pady=3)
+            self.physics_item_frames.append(item)
             self.field_widgets[spec.key] = widget
-        grid.columnconfigure(1, weight=1)
-        grid.columnconfigure(3, weight=1)
         self.gravity_multi_frame = ttk.Frame(box, style="PanelInner.TFrame")
         ttk.Label(
             self.gravity_multi_frame,
@@ -454,27 +493,29 @@ class ControlPanel(ttk.Frame):
             textvariable=self.gravity_values_var,
             style="Neon.TEntry",
         ).pack(fill="x", pady=(4, 2))
-        ttk.Label(
+        self.gravity_list_help_label = ttk.Label(
             self.gravity_multi_frame,
             text="Comma-separated values used per episode, for example: 6.8, 8, 9.5",
             style="PanelMuted.TLabel",
             wraplength=290,
             justify="left",
-        ).pack(fill="x")
-        ttk.Label(
+        )
+        self.gravity_list_help_label.pack(fill="x")
+        self.gravity_mode_hint_label = ttk.Label(
             box,
             textvariable=self.gravity_mode_hint_var,
             style="PanelMuted.TLabel",
             wraplength=290,
             justify="left",
-        ).pack(fill="x", pady=(6, 2))
+        )
+        self.gravity_mode_hint_label.pack(fill="x", pady=(6, 2))
         self.apply_physics_button = ttk.Button(
             box,
             text="Apply Physics",
             style="AccentGlow.TButton",
         )
         self.apply_physics_button.pack(fill="x", pady=(10, 4))
-        ttk.Label(
+        self.physics_help_label = ttk.Label(
             box,
             text=(
                 "Applying physics updates the live evaluation world immediately. "
@@ -483,7 +524,8 @@ class ControlPanel(ttk.Frame):
             style="PanelMuted.TLabel",
             wraplength=290,
             justify="left",
-        ).pack(fill="x")
+        )
+        self.physics_help_label.pack(fill="x")
         self._update_gravity_mode_ui()
         return box
 
@@ -510,26 +552,158 @@ class ControlPanel(ttk.Frame):
 
     def _build_rewards_section(self) -> ttk.LabelFrame:
         box = self._section("Rewards and Penalties")
-        grid = ttk.Frame(box, style="PanelInner.TFrame")
-        grid.pack(fill="x")
-        for index, spec in enumerate(REWARD_FIELD_SPECS):
+        self.reward_grid = ttk.Frame(box, style="PanelInner.TFrame")
+        self.reward_grid.pack(fill="x")
+        self.reward_item_frames.clear()
+        for spec in REWARD_FIELD_SPECS:
             var = spec.make_var()
             self.reward_vars[spec.key] = var
-            row = index // 2
-            col = (index % 2) * 2
-            ttk.Label(grid, text=spec.label, style="PanelLabel.TLabel").grid(
-                row=row,
-                column=col,
-                sticky="w",
-                padx=(0, 8),
-                pady=3,
+            item, widget = self._create_field_item(
+                self.reward_grid,
+                spec,
+                var,
             )
-            widget = self._create_spinbox(grid, spec, var)
-            widget.grid(row=row, column=col + 1, sticky="ew", pady=3)
+            self.reward_item_frames.append(item)
             self.field_widgets[spec.key] = widget
-        grid.columnconfigure(1, weight=1)
-        grid.columnconfigure(3, weight=1)
         return box
+
+    def _create_field_item(
+        self,
+        master,
+        spec: FieldSpec,
+        variable: tk.Variable,
+        with_gravity_toggle: bool = False,
+    ) -> tuple[ttk.Frame, ttk.Spinbox]:
+        item = ttk.Frame(master, style="PanelInner.TFrame")
+        header = ttk.Frame(item, style="PanelInner.TFrame")
+        header.pack(fill="x")
+        label = ttk.Label(
+            header,
+            text=spec.label,
+            style="PanelLabel.TLabel",
+            justify="left",
+        )
+        label.pack(side="left", fill="x", expand=True)
+        if with_gravity_toggle:
+            ttk.Button(
+                header,
+                text="⚙",
+                width=3,
+                style="SecondaryGlow.TButton",
+                command=self._toggle_gravity_mode,
+            ).pack(side="right", padx=(6, 0))
+
+        widget = self._create_spinbox(item, spec, variable)
+        widget.pack(fill="x", pady=(4, 0))
+        item.bind(
+            "<Configure>",
+            lambda event, target=label, reserve=(44 if with_gravity_toggle else 12): target.configure(
+                wraplength=max(event.width - reserve, 110)
+            ),
+        )
+        return item, widget
+
+    def _schedule_responsive_layout(self) -> None:
+        if self._layout_after_id is not None:
+            self.after_cancel(self._layout_after_id)
+        self._layout_after_id = self.after(1, self._apply_responsive_layout)
+
+    def _apply_responsive_layout(self) -> None:
+        self._layout_after_id = None
+        panel_width = max(self.winfo_width(), 1)
+        self._apply_compact_mode(compact_panel_mode_for_width(panel_width), panel_width)
+        self._layout_adaptive_grid(self.physics_grid, self.physics_item_frames)
+        self._layout_adaptive_grid(self.reward_grid, self.reward_item_frames)
+
+    def _apply_compact_mode(self, compact: bool, panel_width: int) -> None:
+        self._compact_mode = compact
+        wraplength = max(panel_width - 64, 150)
+        metric_wraplength = max(panel_width - 72, 150)
+
+        self.subtitle_label.configure(wraplength=wraplength)
+        self.session_status_label.configure(wraplength=wraplength)
+        self.telemetry_label.configure(wraplength=metric_wraplength)
+        self.evaluation_label.configure(wraplength=metric_wraplength)
+        self.evaluation_totals_label.configure(wraplength=wraplength)
+        self.best_metrics_label.configure(wraplength=metric_wraplength)
+        self.current_metrics_label.configure(wraplength=metric_wraplength)
+        self.network_help_label.configure(wraplength=wraplength)
+        self.gravity_list_help_label.configure(wraplength=wraplength)
+        self.gravity_mode_hint_label.configure(wraplength=wraplength)
+        self.physics_help_label.configure(wraplength=wraplength)
+
+        self._layout_brain_source_controls(compact)
+        self._layout_brain_action_buttons(compact)
+        self._layout_output_row(compact)
+        self.layer_editor.set_compact(compact)
+
+    def _layout_brain_source_controls(self, compact: bool) -> None:
+        self.current_brain_radio.pack_forget()
+        self.best_brain_radio.pack_forget()
+        if compact:
+            self.current_brain_radio.pack(anchor="w")
+            self.best_brain_radio.pack(anchor="w", pady=(6, 0))
+        else:
+            self.current_brain_radio.pack(side="left")
+            self.best_brain_radio.pack(side="left", padx=(12, 0))
+
+    def _layout_brain_action_buttons(self, compact: bool) -> None:
+        self.save_button.pack_forget()
+        self.load_button.pack_forget()
+        if compact:
+            self.save_button.pack(fill="x", pady=(0, 6))
+            self.load_button.pack(fill="x")
+        else:
+            self.save_button.pack(side="left", fill="x", expand=True, padx=(0, 4))
+            self.load_button.pack(side="left", fill="x", expand=True, padx=(4, 0))
+
+    def _layout_output_row(self, compact: bool) -> None:
+        self.output_activation_label.pack_forget()
+        self.output_activation_combo.pack_forget()
+        if compact:
+            self.output_activation_label.pack(anchor="w")
+            self.output_activation_combo.pack(fill="x", pady=(6, 0))
+        else:
+            self.output_activation_label.pack(side="left")
+            self.output_activation_combo.pack(side="right")
+
+    def _layout_adaptive_grid(
+        self,
+        grid: ttk.Frame | None,
+        items: list[ttk.Frame],
+    ) -> None:
+        if grid is None or not items:
+            return
+        available_width = max(grid.winfo_width(), 1)
+        columns = adaptive_grid_columns_for_width(available_width)
+        current_columns = getattr(grid, "_current_columns", None)
+        if current_columns == columns:
+            return
+
+        for item in items:
+            item.grid_forget()
+        for column_index in range(2):
+            grid.columnconfigure(column_index, weight=0, uniform="")
+
+        for index, item in enumerate(items):
+            row = index // columns
+            column = index % columns
+            padx = (0, 8) if columns == 2 and column == 0 else (0, 0)
+            item.grid(
+                row=row,
+                column=column,
+                sticky="ew",
+                padx=padx,
+                pady=4,
+            )
+
+        for column_index in range(columns):
+            grid.columnconfigure(
+                column_index,
+                weight=1,
+                uniform=f"adaptive_{id(grid)}",
+            )
+        setattr(grid, "_current_columns", columns)
 
     def _create_spinbox(
         self,

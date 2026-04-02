@@ -46,8 +46,10 @@ class ScrollableFrame(ttk.Frame):
             anchor="nw",
         )
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
-        self.canvas.pack(side="left", fill="both", expand=True)
-        self.scrollbar.pack(side="right", fill="y")
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.scrollbar.grid(row=0, column=1, sticky="ns")
         self.canvas.bind("<Configure>", self._resize_inner)
         self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
 
