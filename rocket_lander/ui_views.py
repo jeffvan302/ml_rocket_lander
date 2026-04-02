@@ -116,12 +116,6 @@ class GameCanvas(tk.Canvas):
             throttle=float(state["throttle"]),
             step_count=int(state["steps"]),
         )
-        self._draw_hud(
-            width,
-            state,
-            info,
-            active_gravity=float(self.snapshot.get("active_gravity", 0.0)),
-        )
         self.create_rectangle(
             width - 240,
             12,
@@ -141,8 +135,6 @@ class GameCanvas(tk.Canvas):
             font=("Segoe UI", 10, "bold"),
         )
 
-        self._draw_outcome_panel(width, height)
-
         if self.training_active:
             self.create_rectangle(
                 0,
@@ -161,46 +153,6 @@ class GameCanvas(tk.Canvas):
                 font=("Segoe UI", 18, "bold"),
                 justify="center",
             )
-
-    def _draw_outcome_panel(self, width: int, height: int) -> None:
-        palette = {
-            "success": ("#0e332e", "#74ffd5", "#ecfffa"),
-            "failure": ("#3c1424", "#ff7ba0", "#fff0f5"),
-            "neutral": ("#10223f", "#79d4ff", "#e8f7ff"),
-        }
-        fill, border, text_fill = palette.get(
-            self.last_outcome_kind,
-            palette["neutral"],
-        )
-        x0 = 18
-        y0 = height - 88
-        x1 = max(x0 + 220, min(width * 0.62, 408))
-        y1 = height - 18
-        self.create_rectangle(
-            x0,
-            y0,
-            x1,
-            y1,
-            fill=fill,
-            outline=border,
-            width=2,
-        )
-        self.create_text(
-            x0 + 14,
-            y0 + 16,
-            text=self.last_outcome_text,
-            fill=text_fill,
-            font=("Consolas", 10, "bold"),
-            anchor="w",
-        )
-        self.create_text(
-            x0 + 14,
-            y0 + 40,
-            text=self.last_outcome_detail,
-            fill="#d8ebff",
-            font=("Segoe UI", 9),
-            anchor="w",
-        )
 
     def _gradient_background(self, width: int, height: int) -> None:
         steps = 30
@@ -298,41 +250,6 @@ class GameCanvas(tk.Canvas):
         self.create_polygon(rotate(flame), fill="#ffa839", outline="")
         self.create_polygon(rotate(core), fill="#fff5ba", outline="")
 
-    def _draw_hud(
-        self,
-        width: int,
-        state: dict[str, Any],
-        info: dict[str, Any],
-        active_gravity: float,
-    ) -> None:
-        self.create_rectangle(18, 18, 232, 152, fill="#091a26", outline="#b7eee5", width=1)
-        self.create_text(
-            32,
-            32,
-            text="Telemetry",
-            fill="#f8fcff",
-            font=("Segoe UI", 11, "bold"),
-            anchor="w",
-        )
-        lines = [
-            f"Fuel: {state['fuel']:.1f}",
-            f"Velocity: {math.hypot(state['vx'], state['vy']):.2f}",
-            f"Angle: {math.degrees(state['angle']):.1f} deg",
-            f"Gravity: {active_gravity:.2f}",
-            f"Steps: {state['steps']}",
-            f"Event: {info.get('event', 'flying')}",
-        ]
-        for index, line in enumerate(lines):
-            self.create_text(
-                32,
-                56 + index * 16,
-                text=line,
-                fill="#d6eef7",
-                font=("Segoe UI", 9),
-                anchor="w",
-            )
-
-
 class GraphCanvas(tk.Canvas):
     def __init__(self, master) -> None:
         super().__init__(master, highlightthickness=0, bg="#08101f")
@@ -381,8 +298,8 @@ class GraphCanvas(tk.Canvas):
             )
             return
 
-        upper = (54, 42, width - 32, height * 0.40)
-        lower = (54, height * 0.50, width - 32, height - 36)
+        upper = (54, 58, width - 32, height * 0.40)
+        lower = (54, height * 0.54, width - 32, height - 36)
         self._draw_plot_box(*upper)
         self._draw_plot_box(*lower)
         self._draw_grid(*upper)
@@ -424,16 +341,34 @@ class GraphCanvas(tk.Canvas):
         self.create_text(20, lower[1] - 14, text="Generation best and mean score", fill="#72f7ff", font=("Consolas", 10, "bold"), anchor="w")
 
         legend = [
-            ("Landing rate", landing_rate_color, f"{landing_rates[-1] * 100:.1f}%"),
-            ("Best score", best_score_color, f"{best_scores[-1]:.1f}"),
-            ("Mean score", mean_score_color, f"{mean_scores[-1]:.1f}"),
+            ("Landing", landing_rate_color, f"{landing_rates[-1] * 100:.1f}%"),
+            ("Best", best_score_color, f"{best_scores[-1]:.1f}"),
+            ("Mean", mean_score_color, f"{mean_scores[-1]:.1f}"),
         ]
-        self.create_rectangle(width - 220, 12, width - 16, 80, fill="#0b1630", outline="#244c88")
+        legend_x0 = max(188, width - 372)
+        legend_x1 = width - 16
+        self.create_rectangle(
+            legend_x0,
+            10,
+            legend_x1,
+            40,
+            fill="#0b1630",
+            outline="#244c88",
+        )
+        inner_width = max(legend_x1 - legend_x0 - 24, 120)
+        column_width = inner_width / len(legend)
         for index, (label, color, value) in enumerate(legend):
-            y = 28 + index * 18
-            self.create_oval(width - 208, y - 4, width - 200, y + 4, fill=color, outline="")
-            self.create_text(width - 194, y, text=label, fill="#cfe7ff", font=("Segoe UI", 9), anchor="w")
-            self.create_text(width - 26, y, text=value, fill="#cfe7ff", font=("Segoe UI", 9), anchor="e")
+            x = legend_x0 + 12 + index * column_width
+            y = 25
+            self.create_line(x, y, x + 16, y, fill=color, width=3)
+            self.create_text(
+                x + 22,
+                y,
+                text=f"{label} {value}",
+                fill="#cfe7ff",
+                font=("Segoe UI", 9),
+                anchor="w",
+            )
 
     def _draw_plot_box(self, x0: float, y0: float, x1: float, y1: float) -> None:
         self.create_rectangle(x0, y0, x1, y1, fill="#081121", outline="#244c88")

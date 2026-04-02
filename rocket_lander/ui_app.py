@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import queue
 import threading
 import tkinter as tk
@@ -501,6 +502,32 @@ class MainApplication:
     def _set_status(self, text: str) -> None:
         self.status_var.set(text)
 
+    def _set_live_telemetry_from_snapshot(
+        self,
+        snapshot: dict[str, Any] | None,
+    ) -> None:
+        if not snapshot or not snapshot.get("state"):
+            self.control_panel.set_live_telemetry(
+                "Telemetry\n"
+                "Fuel n/a | Speed n/a\n"
+                "Angle n/a | Gravity n/a\n"
+                "Steps n/a | Event n/a"
+            )
+            return
+
+        state = snapshot["state"]
+        info = snapshot.get("info", {})
+        speed = math.hypot(float(state["vx"]), float(state["vy"]))
+        angle_deg = math.degrees(float(state["angle"]))
+        gravity = float(snapshot.get("active_gravity", 0.0))
+        telemetry_text = (
+            "Telemetry\n"
+            f"Fuel {float(state['fuel']):.1f} | Speed {speed:.2f}\n"
+            f"Angle {angle_deg:.1f} deg | Gravity {gravity:.2f}\n"
+            f"Steps {int(state['steps'])} | Event {info.get('event', 'flying')}"
+        )
+        self.control_panel.set_live_telemetry(telemetry_text)
+
     def _evaluation_totals_text(self) -> str:
         counts = self.eval_outcome_counts
         return (
@@ -520,7 +547,7 @@ class MainApplication:
         headline = "Last eval: awaiting result"
         detail = "The active brain will keep playing while training is paused."
         totals = self._evaluation_totals_text()
-        self.control_panel.set_evaluation_status(headline, totals)
+        self.control_panel.set_evaluation_status(headline, totals, detail)
         self.game_canvas.set_evaluation_outcome(headline, detail, kind="neutral")
 
     def _record_evaluation_outcome(self, info: dict[str, Any]) -> None:
@@ -529,7 +556,11 @@ class MainApplication:
         if counter_key in self.eval_outcome_counts:
             self.eval_outcome_counts[counter_key] += 1
         totals = self._evaluation_totals_text()
-        self.control_panel.set_evaluation_status(outcome["headline"], totals)
+        self.control_panel.set_evaluation_status(
+            outcome["headline"],
+            totals,
+            outcome["detail"],
+        )
         self.game_canvas.set_evaluation_outcome(
             outcome["headline"],
             outcome["detail"],
@@ -709,7 +740,9 @@ class MainApplication:
         )
         self.eval_observation = self.eval_env.reset(dramatic=True)
         self._reset_evaluation_monitor()
-        self.game_canvas.set_snapshot(self.eval_env.snapshot())
+        snapshot = self.eval_env.snapshot()
+        self._set_live_telemetry_from_snapshot(snapshot)
+        self.game_canvas.set_snapshot(snapshot)
 
     def _evaluation_tick(self) -> None:
         if self.closed:
@@ -735,7 +768,9 @@ class MainApplication:
             if done:
                 self._record_evaluation_outcome(info)
                 self.eval_observation = self.eval_env.reset(dramatic=True)
-            self.game_canvas.set_snapshot(self.eval_env.snapshot())
+            snapshot = self.eval_env.snapshot()
+            self._set_live_telemetry_from_snapshot(snapshot)
+            self.game_canvas.set_snapshot(snapshot)
 
         self.root.after(33, self._evaluation_tick)
 

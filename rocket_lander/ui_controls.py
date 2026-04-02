@@ -196,9 +196,20 @@ class ControlPanel(ttk.Frame):
         self.gravity_multi_var = tk.BooleanVar(value=False)
         self.gravity_values_var = tk.StringVar(value="")
         self.gravity_mode_hint_var = tk.StringVar(value="Single gravity active")
+        self.telemetry_var = tk.StringVar(
+            value=(
+                "Telemetry\n"
+                "Fuel n/a | Speed n/a\n"
+                "Angle n/a | Gravity n/a\n"
+                "Steps n/a | Event n/a"
+            )
+        )
         self.session_status_var = tk.StringVar(value="Ready to evaluate and train.")
         self.evaluation_status_var = tk.StringVar(
-            value="Last eval: awaiting result"
+            value=(
+                "Last eval: awaiting result\n"
+                "The active brain will keep playing while training is paused."
+            )
         )
         self.evaluation_totals_var = tk.StringVar(
             value="Landings 0 | Crashes 0 | Offscreen 0 | Timeouts 0"
@@ -221,6 +232,7 @@ class ControlPanel(ttk.Frame):
             justify="left",
         ).pack(anchor="w", pady=(2, 12))
 
+        self._build_monitor_section().pack(fill="x", pady=(0, 6))
         self._build_session_section().pack(fill="x", pady=6)
         self._build_brain_section().pack(fill="x", pady=6)
         self._build_training_section().pack(fill="x", pady=6)
@@ -264,6 +276,17 @@ class ControlPanel(ttk.Frame):
             wraplength=290,
             justify="left",
         ).pack(fill="x", pady=(8, 0))
+        return box
+
+    def _build_monitor_section(self) -> ttk.LabelFrame:
+        box = self._section("Live Monitor")
+        ttk.Label(
+            box,
+            textvariable=self.telemetry_var,
+            style="MetricCard.TLabel",
+            justify="left",
+            anchor="w",
+        ).pack(fill="x", pady=(0, 8))
         ttk.Label(
             box,
             textvariable=self.evaluation_status_var,
@@ -271,7 +294,7 @@ class ControlPanel(ttk.Frame):
             wraplength=290,
             justify="left",
             anchor="w",
-        ).pack(fill="x", pady=(10, 6))
+        ).pack(fill="x", pady=(0, 6))
         ttk.Label(
             box,
             textvariable=self.evaluation_totals_var,
@@ -589,8 +612,17 @@ class ControlPanel(ttk.Frame):
     def set_session_status(self, text: str) -> None:
         self.session_status_var.set(text)
 
-    def set_evaluation_status(self, text: str, totals_text: str) -> None:
-        self.evaluation_status_var.set(text)
+    def set_live_telemetry(self, text: str) -> None:
+        self.telemetry_var.set(text)
+
+    def set_evaluation_status(
+        self,
+        text: str,
+        totals_text: str,
+        detail_text: str = "",
+    ) -> None:
+        combined = text if not detail_text else f"{text}\n{detail_text}"
+        self.evaluation_status_var.set(combined)
         self.evaluation_totals_var.set(totals_text)
 
     def set_best_metrics(
