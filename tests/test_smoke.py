@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import time
 import unittest
 from types import SimpleNamespace
 from pathlib import Path
@@ -15,7 +16,11 @@ from rocket_lander.training import (
     load_brain_checkpoint,
     save_brain_checkpoint,
 )
-from rocket_lander.ui_app import MainApplication, describe_evaluation_outcome
+from rocket_lander.ui_app import (
+    MainApplication,
+    describe_evaluation_outcome,
+    network_state_is_compatible,
+)
 from rocket_lander.ui_controls import (
     adaptive_grid_columns_for_width,
     compact_panel_mode_for_width,
@@ -142,6 +147,51 @@ class RocketLanderSmokeTests(unittest.TestCase):
         self.assertTrue(compact_panel_mode_for_width(260))
         self.assertFalse(compact_panel_mode_for_width(320))
         self.assertFalse(compact_panel_mode_for_width(520))
+
+    def test_physics_changes_keep_existing_brain_state_compatible(self) -> None:
+        config = AppConfig()
+        updated = AppConfig.from_dict(config.to_dict())
+        updated.physics.gravity = 6.8
+
+        self.assertTrue(network_state_is_compatible(config, updated))
+
+    def test_reward_penalty_changes_keep_existing_brain_state_compatible(self) -> None:
+        config = AppConfig()
+        updated = AppConfig.from_dict(config.to_dict())
+        updated.rewards.alive_bonus += 0.25
+        updated.rewards.step_penalty -= 0.05
+        updated.rewards.velocity_penalty += 0.1
+
+        self.assertTrue(network_state_is_compatible(config, updated))
+
+    def test_reward_penalty_changes_resume_existing_training_session(self) -> None:
+        app = MainApplication()
+        app.root.withdraw()
+        try:
+            app.control_panel.ppo_vars["target_generations"].set(1)
+            app.control_panel.ppo_vars["games_per_generation"].set(2)
+            app.start_training()
+            while app.training_bridge is not None:
+                app.root.update()
+                time.sleep(0.01)
+
+            self.assertEqual(len(app.history), 1)
+            first_generation = app.history[-1].generation_index
+
+            app.control_panel.reward_vars["delta_x_penalty"].set(
+                float(app.control_panel.reward_vars["delta_x_penalty"].get()) + 0.2
+            )
+            app.apply_physics()
+            app.control_panel.ppo_vars["target_generations"].set(1)
+            app.start_training()
+            while app.training_bridge is not None:
+                app.root.update()
+                time.sleep(0.01)
+
+            self.assertEqual(len(app.history), 2)
+            self.assertEqual(app.history[-1].generation_index, first_generation + 1)
+        finally:
+            app._on_close()
 
     def test_poll_training_queue_survives_bridge_reset(self) -> None:
         app = object.__new__(MainApplication)

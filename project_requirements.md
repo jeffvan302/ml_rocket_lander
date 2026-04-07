@@ -72,9 +72,9 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
     - best metrics
     - saved GUI configuration
 
-20. Resuming training must work even after the user changes physics and reward settings, as long as the network architecture remains compatible.
+20. Resuming training must work even after the user changes physics and reward/penalty settings, as long as the network architecture remains compatible.
 
-21. If physics or rewards are changed after loading a session, training must continue from the loaded current brain using the updated physics/reward configuration.
+21. If physics or reward/penalty settings are changed after loading a session, training must continue from the loaded current brain using the updated configuration.
 
 22. During pause or after training, the app must continuously evaluate the selected brain in the live game view.
 
@@ -144,13 +144,15 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
 
 31. The physics section must include an `Apply Physics` action that updates the live evaluation environment without restarting the whole app.
 
-32. The gravity control in the physics section must provide a toggle beside the single gravity input that switches between:
+32. Applying physics or reward/penalty changes must not reset the current brain, best brain, optimizer state, observation normalizers, or training history when the network architecture remains weight-compatible.
+
+33. The gravity control in the physics section must provide a toggle beside the single gravity input that switches between:
     - single gravity mode
     - gravity pool mode with a comma-separated gravity list such as `6.8, 8, 9.5`
 
-33. When gravity pool mode is enabled, each new training episode and each new pause-state evaluation episode must randomly choose one gravity value from the configured list and use only those configured values.
+34. When gravity pool mode is enabled, each new training episode and each new pause-state evaluation episode must randomly choose one gravity value from the configured list and use only those configured values.
 
-34. The left panel must allow editing at least these rewards and penalties:
+35. The left panel must allow editing at least these rewards and penalties:
     - landing bonus
     - close to pad bonus
     - progress scale
@@ -171,7 +173,7 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
     - velocity penalty
     - spin penalty
 
-35. The GUI must validate settings before training begins, including cross-field checks such as:
+36. The GUI must validate settings before training begins, including cross-field checks such as:
     - `spawn_y_min <= spawn_y_max`
     - positive fuel / thrust / gravity constraints
     - valid gravity list values when gravity pool mode is enabled
@@ -179,9 +181,9 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
     - valid landing thresholds
     - supported activation names
 
-36. Validation must distinguish between blocking errors and non-blocking warnings.
+37. Validation must distinguish between blocking errors and non-blocking warnings.
 
-37. The game view must clearly visualize:
+38. The game view must clearly visualize:
     - rocket body
     - flame/thrust
     - landing pad
@@ -190,26 +192,26 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
     - evaluation/training state
     - the active gravity for the current episode
 
-38. During training, the game animation must pause to reduce rendering overhead, while the graph and network panel update after each generation.
+39. During training, the game animation must pause to reduce rendering overhead, while the graph and network panel update after each generation.
 
-39. The graph view must show:
+40. The graph view must show:
     - landing rate
     - generation best score
     - generation mean score
 
-40. The right panel must render the actor network with all nodes shown.
+41. The right panel must render the actor network with all nodes shown.
 
-41. Connections in the network view must visually emphasize stronger weights more than weaker weights.
+42. Connections in the network view must visually emphasize stronger weights more than weaker weights.
 
-42. The network view should be efficient enough to handle larger user-defined networks by caching layout and avoiding unnecessary redraw work.
+43. The network view should be efficient enough to handle larger user-defined networks by caching layout and avoiding unnecessary redraw work.
 
-43. The neural-network visualization must update when:
+44. The neural-network visualization must update when:
     - a new generation completes
     - the selected brain changes
     - the loaded checkpoint changes
     - the canvas size changes
 
-44. The model input vector must include:
+45. The model input vector must include:
     - delta y from pad
     - delta x from pad
     - angle to pad center
@@ -224,7 +226,7 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
     - angular velocity
     - distance to pad
 
-45. Save/load must persist:
+46. Save/load must persist:
     - current brain weights
     - best brain weights
     - optimizer state when available
@@ -235,7 +237,7 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
     - best observation normalization state
     - checkpoint metadata
 
-46. Checkpoint metadata should include at least:
+47. Checkpoint metadata should include at least:
     - schema version
     - save timestamp
     - generation count
@@ -246,9 +248,9 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
     - best generation summary
     - whether the checkpoint is resume-capable
 
-47. Loading an older checkpoint format should remain backward compatible when possible by falling back to a single loaded brain if separate current/best session data is unavailable.
+48. Loading an older checkpoint format should remain backward compatible when possible by falling back to a single loaded brain if separate current/best session data is unavailable.
 
-48. The project must include automated tests and smoke checks that verify:
+49. The project must include automated tests and smoke checks that verify:
     - environment observation shape and step behavior
     - gravity pool episodes use only configured gravity values
     - trainer can complete a short run
@@ -256,18 +258,18 @@ Create a Python Rocket Landing game and Deep Reinforcement Learning training too
     - config validation catches bad input
     - resumed training from a saved session works
 
-49. Minimum validation commands for project completion:
+50. Minimum validation commands for project completion:
     - `python run.py smoke-test`
     - `python -m unittest discover -s tests`
     - `python run.py headless-train --generations 1 --games 4`
     - `python run.py headless-train --load checkpoint.pt --generations 1 --games 2`
 
-50. During pause-state or post-training evaluation playback, the GUI must persistently display the most recent terminal evaluation outcome until the next evaluation episode finishes.
+51. During pause-state or post-training evaluation playback, the GUI must persistently display the most recent terminal evaluation outcome until the next evaluation episode finishes.
 
-51. The evaluation outcome display must distinguish at minimum:
+52. The evaluation outcome display must distinguish at minimum:
     - successful landing
     - crash
     - offscreen loss
     - timeout
 
-52. The GUI should also maintain visible running counts for these evaluation outcomes during the current evaluation watch session so the user can quickly judge whether the observed brain is improving.
+53. The GUI should also maintain visible running counts for these evaluation outcomes during the current evaluation watch session so the user can quickly judge whether the observed brain is improving.

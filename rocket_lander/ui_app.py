@@ -107,6 +107,27 @@ class TrainingBridge:
             self.session.request_stop()
 
 
+def network_state_is_compatible(
+    previous_config: AppConfig,
+    updated_config: AppConfig,
+) -> bool:
+    try:
+        previous_policy = build_policy_from_state(previous_config, device="cpu")
+        updated_policy = build_policy_from_state(updated_config, device="cpu")
+    except Exception:
+        return False
+
+    previous_shapes = tuple(
+        (name, tuple(parameter.shape))
+        for name, parameter in previous_policy.state_dict().items()
+    )
+    updated_shapes = tuple(
+        (name, tuple(parameter.shape))
+        for name, parameter in updated_policy.state_dict().items()
+    )
+    return previous_shapes == updated_shapes
+
+
 def describe_evaluation_outcome(info: dict[str, Any]) -> dict[str, str]:
     event = str(info.get("event", "unknown"))
     speed = float(info.get("speed", 0.0))
@@ -801,12 +822,18 @@ class MainApplication:
         self.config.physics = config.physics
         self.config.rewards = config.rewards
         self._reset_evaluation_episode()
-        message = (
-            "Updated evaluation physics and rewards. "
-            "The running generation keeps its current settings."
-            if self.training_bridge
-            else "Updated evaluation physics and rewards."
-        )
+        if self.training_bridge:
+            message = (
+                "Updated evaluation physics and reward/penalty settings. "
+                "The active training session keeps its current settings, but "
+                "pause/resume will continue the same brain with the new physics."
+            )
+        else:
+            message = (
+                "Updated evaluation physics and reward/penalty settings. "
+                "Current and best brains were preserved, and the next training "
+                "run will continue with the same brain."
+            )
         if validation.warnings:
             message = (
                 f"{message} Warnings: "
@@ -831,18 +858,37 @@ class MainApplication:
             )
             return
 
-        architecture_changed = self.config.network.to_dict() != new_config.network.to_dict()
+        architecture_changed = not network_state_is_compatible(
+            self.config,
+            new_config,
+        )
+        previous_config = self.config
         self.config = new_config
 
-        if architecture_changed:
-            self.history = []
-            self.graph_canvas.set_history(self.history)
-            self._reset_brains(self.config)
-            self._set_status(
-                "Network architecture changed, so current and best brains were reset."
+        try:
+            if architecture_changed:
+                self.history = []
+                self.graph_canvas.set_history(self.history)
+                self._reset_brains(self.config)
+                self._set_status(
+                    "Network shape changed, so current and best brains were reset."
+                )
+            else:
+                self._rebuild_policies()
+        except Exception as exc:
+            self.config = previous_config
+            message = (
+                "Unable to resume with the edited settings, so the previous "
+                "training session was kept intact."
             )
-        else:
-            self._rebuild_policies()
+            self.control_panel.set_session_status(message)
+            self._set_status(message)
+            messagebox.showerror(
+                title="Resume blocked",
+                message=str(exc),
+                parent=self.root,
+            )
+            return
 
         self.pause_pending = False
         self.control_panel.set_training_running(True, pause_pending=False)
