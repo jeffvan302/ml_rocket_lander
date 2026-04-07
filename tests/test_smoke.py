@@ -13,6 +13,7 @@ from rocket_lander.config import AppConfig
 from rocket_lander.environment import OBSERVATION_NAMES, RocketLanderEnv
 from rocket_lander.training import (
     TrainerSession,
+    detect_training_device,
     load_brain_checkpoint,
     save_brain_checkpoint,
 )
@@ -147,6 +148,18 @@ class RocketLanderSmokeTests(unittest.TestCase):
         self.assertTrue(compact_panel_mode_for_width(260))
         self.assertFalse(compact_panel_mode_for_width(320))
         self.assertFalse(compact_panel_mode_for_width(520))
+
+    def test_detect_training_device_accepts_cpu(self) -> None:
+        device, label, warnings = detect_training_device("cpu")
+        self.assertEqual(device.type, "cpu")
+        self.assertEqual(label, "cpu")
+        self.assertEqual(warnings, [])
+
+    def test_detect_training_device_invalid_preference_falls_back_to_cpu(self) -> None:
+        device, label, warnings = detect_training_device("definitely-not-a-device")
+        self.assertEqual(device.type, "cpu")
+        self.assertEqual(label, "cpu")
+        self.assertTrue(any("invalid" in warning.lower() for warning in warnings))
 
     def test_physics_changes_keep_existing_brain_state_compatible(self) -> None:
         config = AppConfig()

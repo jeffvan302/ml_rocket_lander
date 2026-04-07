@@ -323,6 +323,113 @@ def normalize_observation_array(
         return observation_array
 
 
+def _safe_bool_probe(check: Callable[[], Any]) -> bool:
+    try:
+        return bool(check())
+    except Exception:
+        return False
+
+
+def _backend_label(device: torch.device) -> str:
+    if device.type == "cuda" and getattr(torch.version, "hip", None):
+        return "rocm"
+    return device.type
+
+
+def _backend_available(device: torch.device) -> bool:
+    if device.type == "cpu":
+        return True
+    if device.type == "cuda":
+        return _safe_bool_probe(torch.cuda.is_available)
+    if device.type == "xpu":
+        xpu_backend = getattr(torch, "xpu", None)
+        is_available = getattr(xpu_backend, "is_available", None)
+        if is_available is None:
+            return False
+        return _safe_bool_probe(is_available)
+    return False
+
+
+def _synchronize_backend(device: torch.device) -> None:
+    try:
+        if device.type == "cuda" and hasattr(torch.cuda, "synchronize"):
+            torch.cuda.synchronize()
+        elif device.type == "xpu":
+            xpu_backend = getattr(torch, "xpu", None)
+            synchronize = getattr(xpu_backend, "synchronize", None)
+            if synchronize is not None:
+                synchronize()
+    except Exception:
+        pass
+
+
+def _probe_training_backend(device: torch.device) -> None:
+    sample = torch.randn((8, 4), dtype=torch.float32, device=device)
+    layer = nn.Linear(4, 4).to(device)
+    output = layer(sample)
+    distribution = torch.distributions.Normal(output, torch.ones_like(output))
+    loss = output.square().mean() - 0.01 * distribution.log_prob(output).mean()
+    loss.backward()
+    _ = torch.randperm(8, device=device)
+    _ = next(layer.parameters()).grad.detach().cpu().sum().item()
+    _ = output.detach().cpu().mean().item()
+    _synchronize_backend(device)
+
+
+def detect_training_device(
+    preferred: str | torch.device | None = None,
+) -> tuple[torch.device, str, list[str]]:
+    warnings: list[str] = []
+    candidates: list[torch.device] = []
+
+    if preferred is not None:
+        try:
+            candidates.append(torch.device(preferred))
+        except Exception as exc:
+            warnings.append(
+                f"Requested training device {preferred!r} is invalid; "
+                f"falling back to auto-detection. ({exc})"
+            )
+    else:
+        candidates.extend([torch.device("cuda"), torch.device("xpu")])
+
+    for candidate in candidates:
+        label = _backend_label(candidate)
+        if not _backend_available(candidate):
+            warnings.append(
+                f"{label.upper()} is not available; falling back to another backend."
+            )
+            continue
+        try:
+            _probe_training_backend(candidate)
+            return candidate, label, warnings
+        except Exception as exc:
+            warnings.append(
+                f"{label.upper()} probe failed; falling back to CPU. ({exc})"
+            )
+            break
+
+    return torch.device("cpu"), "cpu", warnings
+
+
+def seed_torch_backends(seed: int, device: torch.device) -> None:
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    if device.type == "cuda":
+        try:
+            torch.cuda.manual_seed_all(seed)
+        except Exception:
+            pass
+    elif device.type == "xpu":
+        try:
+            xpu_backend = getattr(torch, "xpu", None)
+            manual_seed_all = getattr(xpu_backend, "manual_seed_all", None)
+            if manual_seed_all is not None:
+                manual_seed_all(seed)
+        except Exception:
+            pass
+
+
 def is_better_candidate(candidate: dict[str, float], best: dict[str, float]) -> bool:
     if candidate["landing_rate"] > best["landing_rate"] + 1e-9:
         return True
@@ -345,21 +452,34 @@ class TrainerSession:
         initial_best_observation_normalizer_state: dict[str, Any] | None = None,
     ) -> None:
         self.config = copy.deepcopy(config)
-        self.device = torch.device(
+        self.device, self.device_label, self.device_warnings = detect_training_device(
             device
-            or ("cuda" if torch.cuda.is_available() else "cpu")
         )
-        torch.manual_seed(self.config.ppo.seed)
-        np.random.seed(self.config.ppo.seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(self.config.ppo.seed)
+        seed_torch_backends(self.config.ppo.seed, self.device)
 
-        self.model = ActorCritic(
-            observation_dim=len(OBSERVATION_NAMES),
-            action_dim=len(ACTION_NAMES),
-            network_config=self.config.network,
-            init_std=self.config.ppo.init_std,
-        ).to(self.device)
+        try:
+            self.model = ActorCritic(
+                observation_dim=len(OBSERVATION_NAMES),
+                action_dim=len(ACTION_NAMES),
+                network_config=self.config.network,
+                init_std=self.config.ppo.init_std,
+            ).to(self.device)
+        except Exception as exc:
+            if self.device.type != "cpu":
+                self.device_warnings.append(
+                    f"{self.device_label.upper()} initialization failed; using CPU instead. ({exc})"
+                )
+                self.device = torch.device("cpu")
+                self.device_label = "cpu"
+                seed_torch_backends(self.config.ppo.seed, self.device)
+                self.model = ActorCritic(
+                    observation_dim=len(OBSERVATION_NAMES),
+                    action_dim=len(ACTION_NAMES),
+                    network_config=self.config.network,
+                    init_std=self.config.ppo.init_std,
+                ).to(self.device)
+            else:
+                raise
         if initial_state_dict is not None:
             self.model.load_state_dict(initial_state_dict)
 
