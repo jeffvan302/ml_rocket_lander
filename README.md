@@ -12,7 +12,24 @@ The project combines:
 
 For the detailed tracked scope of the project, see [project_requirements.md](./project_requirements.md).
 
-**You can create your own launcher with a ml trainer by giving a Coding LLM the [project_requirements.md](./project_requirements.md) and asking it to implement it.**
+**Spec-driven development:** this project was built by handing a coding LLM the [project_requirements.md](./project_requirements.md) specification and iterating on it. Give the same spec to a coding LLM and it should produce a comparable trainer, which makes this a practical example of specification-first AI-assisted development.
+
+![Rocket Landing Lab: the trained PPO policy landing the rocket on the pad, with training curves and a live view of the actor network](docs/rocket_demo.gif)
+
+*The bundled `rocket_best_big_brain.pt` (786 generations, 100% landing rate in its final generation) flying a landing. Center: the simulation and training curves. Right: the actor network driving throttle and gimbal.*
+
+## Quick Start
+
+**Windows, no Python needed:** run `launch.exe`. It downloads a standalone Python runtime into a local `runtime/` folder, installs the requirements there, and opens the app, so nothing touches your system Python. The first run takes a few minutes; later runs start immediately. The launcher's source is in [jeffvan302/ml-example](https://github.com/jeffvan302/ml-example/tree/main/win-launcher).
+
+**Any OS, with Python 3.12:**
+
+```bash
+pip install -r requirements.txt
+python run.py gui --load rocket_best_big_brain.pt
+```
+
+The `.pt` files in the repository root are saved training sessions; `rocket_best_big_brain.pt` is the strongest.
 
 ## Highlights
 
